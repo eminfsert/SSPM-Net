@@ -87,9 +87,13 @@ SSPM-Net/
 ├── SSPM_Net_Demo.ipynb     # ← the demo: open in Colab, Run all (GPU)
 ├── requirements.txt
 ├── data/
-│   └── example_quadpol.npy # bundled real quad-pol patch (4, 512, 512) [HH,HV,VH,VV]
+│   ├── example_quadpol.npy # bundled real quad-pol patch (4, 512, 512) [HH,HV,VH,VV]
+│   └── tiff/               # same patch as per-component TIFFs (amp/real/imgy/pha × 4 pol)
+├── scripts/
+│   └── compare_ri.py       # amplitude-only vs. complex-aux head-to-head
 └── sspmnet/
     ├── model.py            # SSPMNet (the network)
+    ├── complex_data.py     # optional SLC (real/imgy) auxiliaries: RI-N2N + guide
     ├── masking.py          # SSPM: QuadPolSpatialMasker, BernoulliMasker
     ├── trainer.py          # zero-shot training loop  ->  denoise(...)
     ├── losses.py           # self-supervised losses + speckle/histogram terms
@@ -131,6 +135,61 @@ print("Stopped at step:", result["stop_step"])
 Input is amplitude (any positive scale; it is normalized internally by the
 per-channel 99th percentile). For best results use square patches (e.g.
 256–512 px) whose side is a multiple of the wavelet/window size.
+
+### Optional: complex (real/imaginary) auxiliaries — smoother flats, sharper edges
+
+If the single-look complex components are available (as in `data/tiff/`,
+which holds per-channel `amp`, `real`, `imgy`, `pha` TIFFs), the pipeline can
+exploit two additional physics facts:
+
+- **RI Noise2Noise targets (MERLIN-style).** For fully-developed speckle,
+  Re ⟂ Im given the reflectivity, so |Re| and |Im| are two *independent*
+  noisy amplitude observations of the same clean signal. Supervising the
+  masked pixels with both targets halves the effective target-noise power.
+- **Multi-look guided regularization.** The ~8-look span built from
+  |Re|²/|Im|² of all 4 channels gives a far cleaner (log-domain, ratio-based)
+  edge map than the 1-look amplitude; the edge-aware TV and non-local
+  losses are steered by it, so flat areas are smoothed harder while true
+  edges are protected better.
+
+The per-channel phase is uniformly distributed for distributed targets and
+is therefore not used directly; its information enters through Re / Im.
+
+```python
+from sspmnet import denoise, TrainConfig, load_quadpol_tiffs
+
+amp, ri_pair = load_quadpol_tiffs("data/tiff")   # calibrated |Re|/|Im| pair
+result = denoise(amp, TrainConfig(iters=700), ri_pair=ri_pair)
+```
+
+Two RI modes are available via `TrainConfig.ri_mode`:
+
+- `"targets"` (default): the amplitude pipeline is kept and the masked
+  losses gain the two independent RI targets.
+- `"merlin"`: full MERLIN-style **input separation** — each step the network
+  is fed ONE component's pseudo-amplitude and supervised by the OTHER, so
+  the input carries none of the target's noise and *every* pixel supervises
+  (no masking). Cross-pol channels are additionally supervised by the
+  reciprocal channel's opposite component (`merlin_recip_weight`).
+  Inference averages the predictions from both components.
+
+`python scripts/compare_ri.py` runs the amplitude-only baseline and the
+complex-aux variant head-to-head on the bundled TIFF patch and prints the
+fair metrics table. The relevant knobs live in `TrainConfig`:
+`ri_mode`, `ri_weight` (share of the masked loss on RI targets, default
+0.6), `guide_tv` / `guide_alpha`, `guide_nlm`, and `merlin_recip_weight`.
+
+Two further refinements for the MERLIN mode:
+
+- `merlin_loss="nll"` uses MERLIN's original Gaussian negative
+  log-likelihood instead of L1 — unbiased in expectation (the predicted
+  intensity converges to the true reflectivity), removing the median-
+  convention scale offset of the L1 target.
+- `guide_cv_protect` (e.g. `0.3`) adds a Lee-style heterogeneity gate to
+  the guided TV: the local coefficient of variation of the multi-look span
+  separates homogeneous areas (smoothed at full strength) from texture /
+  point targets (regularization shut off), targeting strong speckle
+  suppression and edge preservation at the same time.
 
 The model also prints a metrics table comparing the noisy input and the
 SSPM-Net output, e.g.:

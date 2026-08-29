@@ -30,8 +30,9 @@ from .masking import QuadPolSpatialMasker
 from .losses import (
     MaskedL1Loss, adaptive_tv_loss, polarization_consistency_loss, bound_loss,
     polarimetric_nl_loss, compute_reference_histogram, compute_soft_histogram,
-    warmup_target_4ch,
+    warmup_target_4ch, guide_edge_weights, _box_blur,
 )
+from .complex_data import _L1_RATIO
 
 
 @dataclass
@@ -60,6 +61,29 @@ class TrainConfig:
 
     # Pre-warmup
     pre_warmup: int = 50
+
+    # Complex (real/imaginary) auxiliary supervision — active only when
+    # ``denoise(..., ri_pair=...)`` is given (see sspmnet.complex_data)
+    ri_weight: float = 0.6          # share of the masked loss on RI targets
+    guide_tv: bool = True           # multi-look guided TV edge weights
+    guide_alpha: float = 3.0        # guided-TV edge sensitivity
+    guide_nlm: bool = True          # multi-look reference for the NL loss
+    ri_mode: str = "targets"        # "targets": RI as extra masked targets;
+                                    # "merlin": MERLIN-style input separation
+                                    # — train on ONE complex component,
+                                    # supervise with the OTHER (full-pixel,
+                                    # no masking; inference averages both)
+    merlin_recip_weight: float = 0.5  # cross-pol share of the reciprocal
+                                    # channel's opposite-component target
+    merlin_loss: str = "l1"         # "l1" (median convention) or "nll":
+                                    # Gaussian negative log-likelihood of the
+                                    # target component given the predicted
+                                    # amplitude (MERLIN's original loss;
+                                    # unbiased — d^2 converges to the true
+                                    # reflectivity, no calibration constant)
+    guide_cv_protect: float = 0.0   # Lee-style heterogeneity gate threshold
+                                    # on the guide's local CV (0 disables;
+                                    # ~0.3 for the 8-look span)
 
     # EMA
     use_ema: bool = True
@@ -92,7 +116,8 @@ def _resolve_device(name: str) -> torch.device:
     return torch.device(name)
 
 
-def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True):
+def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True,
+            ri_pair=None):
     """Zero-shot denoise one quad-pol amplitude image.
 
     Parameters
@@ -108,6 +133,13 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         every ``snapshot_every`` step (for visualization).
     verbose : bool
         Print per-snapshot progress.
+    ri_pair : np.ndarray, shape (2, 4, H, W), optional
+        Calibrated |Re| / |Im| pseudo-amplitude pair on the amplitude scale
+        (from ``sspmnet.complex_data.load_quadpol_tiffs``). When given, the
+        masked losses additionally use these two independent Noise2Noise
+        targets, and the TV / non-local regularizers are steered by a
+        multi-look guide built from them (see ``TrainConfig.ri_weight``,
+        ``guide_tv``, ``guide_nlm``).
 
     Returns
     -------
@@ -131,6 +163,27 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
     amp_norm = np.clip(amp_4ch_raw / np.maximum(q99, 1e-9), 0.0, 5.0)
     noisy_t = torch.from_numpy(amp_norm).unsqueeze(0).to(device)
 
+    # ── Complex (RI) auxiliaries: independent pseudo-amplitude targets,
+    #    multi-look edge guide for TV, multi-look reference for the NL loss ──
+    ar_t = ai_t = tv_weights = nl_ref = None
+    if ri_pair is not None:
+        ri_pair = np.asarray(ri_pair, dtype=np.float32)
+        ri_norm = np.clip(ri_pair / np.maximum(q99[None], 1e-9), 0.0, 5.0)
+        ri_t = torch.from_numpy(ri_norm).to(device)          # (2, 4, H, W)
+        ar_t = ri_t[0:1]                                     # (1, 4, H, W)
+        ai_t = ri_t[1:2]
+        with torch.no_grad():
+            if cfg.guide_tv:
+                # ~8-look span guide (2 RI looks x 4 channels)
+                guide = (ri_t ** 2).mean(dim=(0, 1)).sqrt()[None, None]
+                tv_weights = guide_edge_weights(
+                    guide, alpha=cfg.guide_alpha,
+                    cv_protect=cfg.guide_cv_protect or None)
+            if cfg.guide_nlm:
+                # per-channel 2-look reference, lightly smoothed
+                nl_ref = _box_blur(0.5 * (ar_t + ai_t), k=3, passes=1)
+    merlin = ri_pair is not None and cfg.ri_mode == "merlin"
+
     model = SSPMNet(Config()).to(device)
     masker = QuadPolSpatialMasker(keep_prob=cfg.mask_keep_prob).to(device)
     crit = MaskedL1Loss()
@@ -153,12 +206,18 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
 
     # ── Pre-warmup: pull the random init toward a bilateral-smoothed target ──
     if cfg.pre_warmup > 0:
+        # With RI data the bilateral runs on the 2-look mean (less speckle);
+        # its small scale offset vs. amplitude is corrected by main training.
+        warm_src = ri_norm.mean(axis=0) if ri_pair is not None else amp_norm
         warmup_t = torch.from_numpy(
-            warmup_target_4ch(amp_norm)).float().unsqueeze(0).to(device)
+            warmup_target_4ch(warm_src)).float().unsqueeze(0).to(device)
         opt_pw = torch.optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=1e-5)
-        for _ in range(cfg.pre_warmup):
+        for i_pw in range(cfg.pre_warmup):
             model.train()
-            loss_pw = ((model(noisy_t) - warmup_t) ** 2).mean()
+            # In MERLIN mode the network sees component inputs, so warm up
+            # on them too (alternating), not on the amplitude.
+            x_pw = ri_t[i_pw % 2:i_pw % 2 + 1] if merlin else noisy_t
+            loss_pw = ((model(x_pw) - warmup_t) ** 2).mean()
             opt_pw.zero_grad()
             loss_pw.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -184,10 +243,17 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
 
     loss_hist = []
 
+    # MERLIN mode: the network is trained on component inputs, so inference
+    # averages the predictions from BOTH components (as in MERLIN's test time)
+    infer_inputs = [ar_t, ai_t] if merlin else [noisy_t]
+
     if verbose:
+        ri_msg = (f" RI(mode={cfg.ri_mode},w={cfg.ri_weight},"
+                  f"guide_tv={cfg.guide_tv},"
+                  f"guide_nlm={cfg.guide_nlm})" if ri_pair is not None else "")
         print(f"  [train] iters={n_iters} lr={cfg.lr} tv_mult={cfg.tv_mult} "
               f"speckle_factor={cfg.use_speckle_factor} hist={cfg.hist_lambda} "
-              f"nl={cfg.nlm_lambda} ema={cfg.use_ema} tta={cfg.use_tta}")
+              f"nl={cfg.nlm_lambda} ema={cfg.use_ema} tta={cfg.use_tta}{ri_msg}")
 
     for step in range(n_iters):
         model.train()
@@ -195,25 +261,84 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         ltv = math.cos(math.pi * step / max(n_iters, 1))
         lambda_tv = cfg.lambda_tv_end + 0.5 * (cfg.lambda_tv_start - cfg.lambda_tv_end) * (1.0 + ltv)
 
-        m = masker(noisy_t)
-        d = model(m["masked_input"])
+        if merlin:
+            # ── MERLIN-style input separation: the input is ONE complex
+            #    component's pseudo-amplitude, the target is the OTHER, so
+            #    the input carries none of the target's noise and EVERY
+            #    pixel supervises (no masking needed). ──
+            k = step % 2
+            x_in, tgt = ri_t[k:k + 1], ri_t[1 - k:2 - k]
+            d = model(x_in)
 
-        # Co-pol blind-spot (HH, VV)
-        l_hh = crit(d[:, 0:1], noisy_t[:, 0:1], m["mask_hh"])
-        l_vv = crit(d[:, 3:4], noisy_t[:, 3:4], m["mask_vv"])
-        loss_copol = (l_hh + l_vv) / 2
+            if cfg.merlin_loss == "nll":
+                # Gaussian NLL of the raw component c ~ N(0, A^2/2) given
+                # the predicted amplitude A = d (MERLIN's original loss;
+                # E-unbiased: d^2 -> true reflectivity). Targets arrive on
+                # the L1 convention (x _L1_RATIO); undo it to recover the
+                # raw component scale.
+                c = tgt / _L1_RATIO
+                v = d ** 2 + 1e-3
+                nll = 0.5 * torch.log(v) + (c ** 2) / v
 
-        # Cross-pol Noise2Noise (HV <-> VH via the synchronized mask)
-        mxp = m["mask_xpol"]
-        l_hv = crit(d[:, 1:2], noisy_t[:, 2:3], mxp)
-        l_vh = crit(d[:, 2:3], noisy_t[:, 1:2], mxp)
-        loss_xpol = (l_hv + l_vh) / 2
+                def pair_loss(ch, rec_ch):
+                    w_r = cfg.merlin_recip_weight
+                    if rec_ch is None:
+                        return nll[:, ch:ch + 1].mean()
+                    c_r = tgt[:, rec_ch:rec_ch + 1] / _L1_RATIO
+                    v_c = v[:, ch:ch + 1]
+                    nll_r = 0.5 * torch.log(v_c) + (c_r ** 2) / v_c
+                    return ((1 - w_r) * nll[:, ch:ch + 1].mean()
+                            + w_r * nll_r.mean())
+
+                loss_copol = (pair_loss(0, None) + pair_loss(3, None)) / 2
+                loss_xpol = (pair_loss(1, 2) + pair_loss(2, 1)) / 2
+            else:
+                # Co-pol: full-pixel L1 N2N vs. the opposite component
+                l_hh = (d[:, 0:1] - tgt[:, 0:1]).abs().mean()
+                l_vv = (d[:, 3:4] - tgt[:, 3:4]).abs().mean()
+                loss_copol = (l_hh + l_vv) / 2
+
+                # Cross-pol: opposite component of own channel +
+                # (reciprocity) of the reciprocal channel — both
+                # independent of the input
+                w_r = cfg.merlin_recip_weight
+                l_hv = ((1 - w_r) * (d[:, 1:2] - tgt[:, 1:2]).abs().mean()
+                        + w_r * (d[:, 1:2] - tgt[:, 2:3]).abs().mean())
+                l_vh = ((1 - w_r) * (d[:, 2:3] - tgt[:, 2:3]).abs().mean()
+                        + w_r * (d[:, 2:3] - tgt[:, 1:2]).abs().mean())
+                loss_xpol = (l_hv + l_vh) / 2
+        else:
+            m = masker(noisy_t)
+            d = model(m["masked_input"])
+
+            def masked_loss(pred, tgt_ch, mask):
+                """Masked L1 vs. the amplitude target of channel ``tgt_ch``;
+                with RI data, mixed with the two independent |Re|/|Im|
+                pseudo-amplitude targets of the same channel."""
+                l_amp = crit(pred, noisy_t[:, tgt_ch:tgt_ch + 1], mask)
+                if ar_t is None or cfg.ri_weight <= 0:
+                    return l_amp
+                l_ri = 0.5 * (crit(pred, ar_t[:, tgt_ch:tgt_ch + 1], mask)
+                              + crit(pred, ai_t[:, tgt_ch:tgt_ch + 1], mask))
+                return (1.0 - cfg.ri_weight) * l_amp + cfg.ri_weight * l_ri
+
+            # Co-pol blind-spot (HH, VV)
+            l_hh = masked_loss(d[:, 0:1], 0, m["mask_hh"])
+            l_vv = masked_loss(d[:, 3:4], 3, m["mask_vv"])
+            loss_copol = (l_hh + l_vv) / 2
+
+            # Cross-pol Noise2Noise (HV <-> VH via the synchronized mask)
+            mxp = m["mask_xpol"]
+            l_hv = masked_loss(d[:, 1:2], 2, mxp)
+            l_vh = masked_loss(d[:, 2:3], 1, mxp)
+            loss_xpol = (l_hv + l_vh) / 2
 
         # Regularization
-        l_tv = adaptive_tv_loss(d, noisy_t)
+        l_tv = adaptive_tv_loss(d, noisy_t, weights=tv_weights)
         l_pol = polarization_consistency_loss(d)
         l_bound = bound_loss(d)
-        l_nl = (polarimetric_nl_loss(d, noisy_t, cfg.nlm_window, cfg.nlm_sigma)
+        l_nl = (polarimetric_nl_loss(d, nl_ref if nl_ref is not None else noisy_t,
+                                     cfg.nlm_window, cfg.nlm_sigma)
                 if cfg.nlm_lambda > 0 else torch.tensor(0.0, device=device))
 
         # Speckle factorization + histogram matching
@@ -265,9 +390,11 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             with torch.no_grad():
                 inf_model.train()                 # MC-dropout active
                 acc = torch.zeros_like(noisy_t)
-                for _ in range(8):
-                    acc += inf_model(noisy_t).clamp(0, 1)
-                acc /= 8
+                n_pass = 8 // len(infer_inputs)
+                for x_base in infer_inputs:
+                    for _ in range(n_pass):
+                        acc += inf_model(x_base).clamp(0, 1)
+                acc /= n_pass * len(infer_inputs)
             d_np = acc[0].cpu().numpy()
 
             info = {"step": step + 1, "iters": n_iters, "loss": float(loss.item())}
@@ -282,26 +409,28 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
     def _final_infer():
         final_model.train()                       # MC-dropout active
         with torch.no_grad():
-            if cfg.use_tta:
-                acc_f = torch.zeros_like(noisy_t)
-                cnt = 0
-                for k_rot in range(4):
-                    for do_flip in (False, True):
-                        x_aug = torch.rot90(noisy_t, k_rot, dims=[-2, -1])
-                        if do_flip:
-                            x_aug = torch.flip(x_aug, dims=[-1])
-                        for _ in range(cfg.tta_mc_passes):
-                            out = final_model(x_aug).clamp(0, 1)
-                            if do_flip:
-                                out = torch.flip(out, dims=[-1])
-                            out = torch.rot90(out, -k_rot, dims=[-2, -1])
-                            acc_f += out
-                            cnt += 1
-                return acc_f / cnt
             acc_f = torch.zeros_like(noisy_t)
-            for _ in range(cfg.n_inference):
-                acc_f += final_model(noisy_t).clamp(0, 1)
-            return acc_f / cfg.n_inference
+            cnt = 0
+            if cfg.use_tta:
+                for x_base in infer_inputs:
+                    for k_rot in range(4):
+                        for do_flip in (False, True):
+                            x_aug = torch.rot90(x_base, k_rot, dims=[-2, -1])
+                            if do_flip:
+                                x_aug = torch.flip(x_aug, dims=[-1])
+                            for _ in range(cfg.tta_mc_passes):
+                                out = final_model(x_aug).clamp(0, 1)
+                                if do_flip:
+                                    out = torch.flip(out, dims=[-1])
+                                out = torch.rot90(out, -k_rot, dims=[-2, -1])
+                                acc_f += out
+                                cnt += 1
+                return acc_f / cnt
+            for x_base in infer_inputs:
+                for _ in range(max(cfg.n_inference // len(infer_inputs), 1)):
+                    acc_f += final_model(x_base).clamp(0, 1)
+                    cnt += 1
+            return acc_f / cnt
 
     acc = _final_infer()                          # all 4 channels, same model
     if verbose:

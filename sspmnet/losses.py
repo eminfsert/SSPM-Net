@@ -10,6 +10,11 @@ Total loss (assembled in ``trainer.py``):
         + lambda_nl   * L_nl        (non-local self-similarity)
         + lambda_hist * L_hist      (speckle histogram -> Rayleigh)
         + lambda_fact * L_fact      (speckle factorization: y ~ x * S)
+
+When complex (real/imaginary) auxiliary data is supplied (see
+``sspmnet.complex_data``), L_mask additionally uses the independent
+|Re| / |Im| pseudo-amplitude targets, and L_tv / L_nl are steered by a
+multi-look guide (``guide_edge_weights``) instead of the noisy amplitude.
 """
 import numpy as np
 import torch
@@ -32,21 +37,86 @@ class MaskedL1Loss(nn.Module):
         return diff.sum() / n_dropped
 
 
-def adaptive_tv_loss(x: torch.Tensor, original: torch.Tensor) -> torch.Tensor:
+def adaptive_tv_loss(x: torch.Tensor, original: torch.Tensor,
+                     weights=None) -> torch.Tensor:
     """Edge-aware total variation.
 
     TV is down-weighted where the original image has strong gradients, so
-    flat areas are smoothed while edges are preserved.
+    flat areas are smoothed while edges are preserved. When ``weights``
+    (a ``(weight_h, weight_w)`` pair, e.g. from
+    :func:`guide_edge_weights`) is given, those precomputed maps are used
+    instead of the gradients of the noisy ``original`` — a multi-look
+    guide gives a far less noisy edge map, so flats are smoothed harder
+    while true edges are protected better.
     """
-    grad_h = (original[:, :, 1:, :] - original[:, :, :-1, :]).abs()
-    grad_w = (original[:, :, :, 1:] - original[:, :, :, :-1]).abs()
-
-    weight_h = torch.exp(-grad_h * 10.0)
-    weight_w = torch.exp(-grad_w * 10.0)
+    if weights is None:
+        grad_h = (original[:, :, 1:, :] - original[:, :, :-1, :]).abs()
+        grad_w = (original[:, :, :, 1:] - original[:, :, :, :-1]).abs()
+        weight_h = torch.exp(-grad_h * 10.0)
+        weight_w = torch.exp(-grad_w * 10.0)
+    else:
+        weight_h, weight_w = weights
 
     tv_h = ((x[:, :, 1:, :] - x[:, :, :-1, :]).abs() * weight_h).mean()
     tv_w = ((x[:, :, :, 1:] - x[:, :, :, :-1]).abs() * weight_w).mean()
     return tv_h + tv_w
+
+
+def _box_blur(x: torch.Tensor, k: int = 3, passes: int = 2) -> torch.Tensor:
+    """Repeated box blur (~= small Gaussian), per channel."""
+    C = x.shape[1]
+    kern = torch.full((C, 1, k, k), 1.0 / (k * k), dtype=x.dtype, device=x.device)
+    for _ in range(passes):
+        x = F.conv2d(x, kern, padding=k // 2, groups=C)
+    return x
+
+
+def guide_edge_weights(guide_amp: torch.Tensor, alpha: float = 3.0,
+                       cv_protect: float = None):
+    """TV edge weights from a multi-look guide amplitude image.
+
+    Speckle is multiplicative, so edges are detected on the LOG intensity
+    (ratio detector) of the lightly smoothed guide; gradients are
+    normalized by their own mean, making ``alpha`` dimensionless (larger
+    alpha = edges protected more aggressively).
+
+    When ``cv_protect`` is given, a Lee-style heterogeneity gate is applied
+    on top: the local coefficient of variation of the guide separates
+    homogeneous areas (CV near the pure-speckle floor — for the ~8-look
+    amplitude span that floor is ~0.18) from texture / point targets.
+    Regularization stays fully on in homogeneous areas and shuts off where
+    CV exceeds the threshold, so flats can be smoothed hard without
+    touching deterministic structure.
+
+    Parameters
+    ----------
+    guide_amp : (B, 1, H, W) tensor — multi-look amplitude guide (e.g. the
+        8-look span built from |Re| / |Im| of all 4 channels).
+    alpha : float — edge sensitivity.
+    cv_protect : float or None — CV threshold of the heterogeneity gate
+        (e.g. 0.3 for the 8-look span); None disables the gate.
+
+    Returns
+    -------
+    (weight_h, weight_w) : tensors of shape (B, 1, H-1, W) / (B, 1, H, W-1),
+        in (0, 1]; broadcast against the (B, 4, ...) TV terms.
+    """
+    with torch.no_grad():
+        g = torch.log(_box_blur(guide_amp, k=3, passes=2) ** 2 + 1e-6)
+        grad_h = (g[:, :, 1:, :] - g[:, :, :-1, :]).abs()
+        grad_w = (g[:, :, :, 1:] - g[:, :, :, :-1]).abs()
+        norm = 0.5 * (grad_h.mean() + grad_w.mean()) + 1e-8
+        weight_h = torch.exp(-alpha * grad_h / norm)
+        weight_w = torch.exp(-alpha * grad_w / norm)
+
+        if cv_protect is not None and cv_protect > 0:
+            mu = _box_blur(guide_amp, k=9, passes=1)
+            m2 = _box_blur(guide_amp ** 2, k=9, passes=1)
+            cv = torch.sqrt((m2 - mu ** 2).clamp(min=0)) / (mu + 1e-6)
+            gate = torch.sigmoid((cv_protect - cv) / (0.25 * cv_protect))
+            weight_h = weight_h * 0.5 * (gate[:, :, 1:, :] + gate[:, :, :-1, :])
+            weight_w = weight_w * 0.5 * (gate[:, :, :, 1:] + gate[:, :, :, :-1])
+    return weight_h, weight_w
 
 
 def polarization_consistency_loss(denoised: torch.Tensor) -> torch.Tensor:

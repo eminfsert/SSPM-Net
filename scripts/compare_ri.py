@@ -22,7 +22,8 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from sspmnet import denoise, TrainConfig, load_quadpol_tiffs           # noqa: E402
+from sspmnet import (denoise, TrainConfig, load_quadpol_tiffs,          # noqa: E402
+                     load_quadpol_phase)                                 # noqa: E402
 from sspmnet.metrics import (find_top_k_rois, enl_roi_multi, epi_metric,
                              ssim_metric, reciprocity_metrics)          # noqa: E402
 
@@ -53,22 +54,33 @@ def main():
     ap.add_argument("--guide-alpha", type=float, default=3.0)
     ap.add_argument("--merlin", action="store_true",
                     help="also run the MERLIN input-separation variant")
+    ap.add_argument("--phase", action="store_true",
+                    help="also run MERLIN + phase feedback (HV-VH "
+                         "reciprocity coherence; recommended config)")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
     amp, ri = load_quadpol_tiffs(args.tiff_dir)
     print(f"Loaded {args.tiff_dir}: amp {amp.shape}, ri {ri.shape}")
 
-    variants = [("baseline", None, "targets"), ("+RI", ri, "targets")]
+    variants = [("baseline", None, "targets", None),
+                ("+RI", ri, "targets", None)]
     if args.merlin:
-        variants.append(("MERLIN", ri, "merlin"))
+        variants.append(("MERLIN", ri, "merlin", None))
+    if args.phase:
+        pha = load_quadpol_phase(args.tiff_dir)
+        variants.append(("MERLIN+PH", ri, "merlin", pha))
 
     runs = {}
-    for name, ri_pair, mode in variants:
+    for name, ri_pair, mode, pha_a in variants:
         print(f"\n=== {name} ===")
+        kw = {}
+        if pha_a is not None:      # validated phase-feedback config
+            kw = dict(guide_cv_protect=0.3, phase_smooth_boost=3.0,
+                      phase_fidelity=0.5)
         cfg = TrainConfig(iters=args.iters, ri_weight=args.ri_weight,
-                          guide_alpha=args.guide_alpha, ri_mode=mode)
-        res = denoise(amp, cfg, ri_pair=ri_pair)
+                          guide_alpha=args.guide_alpha, ri_mode=mode, **kw)
+        res = denoise(amp, cfg, ri_pair=ri_pair, pha=pha_a)
         runs[name] = res["denoised"]
         np.save(os.path.join(args.out, f"denoised_{name.strip('+')}.npy"),
                 res["denoised"])

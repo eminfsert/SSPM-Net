@@ -153,7 +153,8 @@ exploit two additional physics facts:
   edges are protected better.
 
 The per-channel phase is uniformly distributed for distributed targets and
-is therefore not used directly; its information enters through Re / Im.
+is therefore not used directly as a value; what it DOES carry is
+cross-channel evidence, exploited by the **phase feedback** below.
 
 ```python
 from sspmnet import denoise, TrainConfig, load_quadpol_tiffs
@@ -161,6 +162,47 @@ from sspmnet import denoise, TrainConfig, load_quadpol_tiffs
 amp, ri_pair = load_quadpol_tiffs("data/tiff")   # calibrated |Re|/|Im| pair
 result = denoise(amp, TrainConfig(iters=700), ri_pair=ri_pair)
 ```
+
+### Optional: phase feedback — a per-pixel "is this value noise?" map
+
+Monostatic reciprocity gives S<sub>HV</sub> = S<sub>VH</sub>: the two
+cross-pol channels share the *same* complex speckle and differ only by
+additive thermal/system noise. Their local phase agreement (circular
+concentration of the doubled angle, robust to the [0, π] fold of the
+bundled uint8 phase files) therefore estimates the per-pixel
+signal-to-noise ratio: ≈1 where the observed value is signal (speckle
+included), ≈floor where it is instrument noise (dark cross-pol: roads,
+water, shadow). `sspmnet.phase_data` turns the `*_pha.tiff` files into
+this map (plus an HH–VV surface-scattering and a spatial phase-coherence
+map), and the trainer uses it two ways:
+
+- **Regularization boost** (`phase_smooth_boost`): TV and the non-local
+  loss are multiplied by `1 + b·(1 − snr)` — noise-dominated pixels are
+  smoothed harder, while the multi-look edge weights keep true edges
+  protected.
+- **Data-term down-weight** (`phase_fidelity`): the cross-pol MERLIN /
+  N2N loss is scaled by `1 − f·(1 − snr)` — where the observation is
+  thermal noise, its positive-median target is trusted less and the
+  regularizers take over.
+
+```python
+from sspmnet import denoise, TrainConfig, load_quadpol_tiffs, load_quadpol_phase
+
+amp, ri_pair = load_quadpol_tiffs("data/tiff")
+pha = load_quadpol_phase("data/tiff")
+cfg = TrainConfig(iters=700, ri_mode="merlin", tv_mult=10.0,
+                  guide_cv_protect=0.3,
+                  phase_smooth_boost=3.0, phase_fidelity=0.5)
+result = denoise(amp, cfg, ri_pair=ri_pair, pha=pha)
+```
+
+On the ground-truth protocol (known clean + simulated 1-look complex
+speckle with shared cross-pol speckle and thermal noise calibrated to the
+real patch's HV–VH coherence), this configuration raises ENL-ROI(HV) by
++122% and ENL-ROI(HH) by +14% over the complex-aux winner at equal PSNR,
+with true EPI(HV) improving 0.768 → 0.782 (`b=5` trades a further ENL
+gain, +177%, for ~0.1 dB of PSNR(HV)). Reproduce with
+`python scripts/compare_ri.py --merlin --phase`.
 
 Two RI modes are available via `TrainConfig.ri_mode`:
 

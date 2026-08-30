@@ -30,8 +30,9 @@ from .masking import QuadPolSpatialMasker
 from .losses import (
     MaskedL1Loss, adaptive_tv_loss, polarization_consistency_loss, bound_loss,
     polarimetric_nl_loss, compute_reference_histogram, compute_soft_histogram,
-    warmup_target_4ch, guide_edge_weights, _box_blur,
+    warmup_target_4ch, guide_edge_weights, modulate_edge_weights, _box_blur,
 )
+from .phase_data import phase_feedback_maps
 from .complex_data import _L1_RATIO
 
 
@@ -85,6 +86,26 @@ class TrainConfig:
                                     # on the guide's local CV (0 disables;
                                     # ~0.3 for the 8-look span)
 
+    # Phase feedback — active only when ``denoise(..., pha=...)`` is given
+    # (see sspmnet.phase_data). The HV-VH reciprocity coherence gives a
+    # per-pixel "is this value noise?" map: reciprocity makes the two
+    # cross-pol channels share the same complex speckle, so their phase
+    # DISAGREES only where additive thermal/system noise dominates.
+    phase_win: int = 7              # circular-statistics window
+    phase_smooth_boost: float = 1.5 # TV/NLM boost where noise-dominated:
+                                    # x (1 + b * (1 - snr)); 0 disables
+    phase_surface_boost: float = 0.0  # extra TV/NLM boost from the HH-VV
+                                    # co-pol (surface-scattering) coherence
+    phase_protect: float = 0.0      # TV/NLM protection from the spatial
+                                    # phase-coherence (deterministic
+                                    # scatterer) map: x (1 - p * det)
+    phase_fidelity: float = 0.5     # down-weight of the CROSS-POL data
+                                    # term where noise-dominated (the N2N
+                                    # target there is thermal noise, whose
+                                    # positive median biases dark pixels
+                                    # up): x (1 - f * (1 - snr)), mean-1
+                                    # renormalized; 0 disables
+
     # EMA
     use_ema: bool = True
     ema_decay: float = 0.99
@@ -117,7 +138,7 @@ def _resolve_device(name: str) -> torch.device:
 
 
 def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True,
-            ri_pair=None):
+            ri_pair=None, pha=None):
     """Zero-shot denoise one quad-pol amplitude image.
 
     Parameters
@@ -140,6 +161,14 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         targets, and the TV / non-local regularizers are steered by a
         multi-look guide built from them (see ``TrainConfig.ri_weight``,
         ``guide_tv``, ``guide_nlm``).
+    pha : np.ndarray (4, H, W), or dict, optional
+        Folded quad-pol phase in [0, pi] (from
+        ``sspmnet.phase_data.load_quadpol_phase``), or a precomputed map
+        dict from ``phase_feedback_maps``. Enables the per-pixel phase
+        feedback: regularization is boosted where the HV-VH reciprocity
+        coherence says the observation is noise-dominated, and the
+        cross-pol data term is down-weighted there (see the ``phase_*``
+        fields of ``TrainConfig``).
 
     Returns
     -------
@@ -183,6 +212,35 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 # per-channel 2-look reference, lightly smoothed
                 nl_ref = _box_blur(0.5 * (ar_t + ai_t), k=3, passes=1)
     merlin = ri_pair is not None and cfg.ri_mode == "merlin"
+
+    # ── Phase feedback maps: per-pixel noise/structure evidence from the
+    #    folded quad-pol phase (see sspmnet.phase_data) ──
+    phase_factor = fid_w = nl_w = None
+    if pha is not None:
+        pm = pha if isinstance(pha, dict) else phase_feedback_maps(
+            pha=np.asarray(pha, dtype=np.float32), win=cfg.phase_win)
+        snr_t = torch.from_numpy(pm["snr"]).float()[None, None].to(device)
+        noise_map = 1.0 - snr_t                       # 1 = noise-dominated
+        boost = 1.0 + cfg.phase_smooth_boost * noise_map
+        if cfg.phase_surface_boost > 0:
+            surf_t = torch.from_numpy(pm["surface"]).float()[None, None].to(device)
+            boost = boost + cfg.phase_surface_boost * surf_t
+        if cfg.phase_protect > 0:
+            det_t = torch.from_numpy(pm["det"]).float()[None, None].to(device)
+            boost = boost * (1.0 - cfg.phase_protect * det_t)
+        phase_factor = boost                          # (1, 1, H, W)
+        nl_w = phase_factor / phase_factor.mean()     # mean-1 for L_nl
+        if cfg.phase_fidelity > 0:
+            fw = 1.0 - cfg.phase_fidelity * noise_map
+            fid_w = fw / fw.mean()                    # mean-1 data weight
+        if tv_weights is None:
+            # no multi-look guide available: build edge weights from the
+            # (1-look) span so the phase factor has something to modulate
+            span_g = (noisy_t ** 2).mean(dim=1, keepdim=True).sqrt()
+            tv_weights = guide_edge_weights(
+                span_g, alpha=cfg.guide_alpha,
+                cv_protect=cfg.guide_cv_protect or None)
+        tv_weights = modulate_edge_weights(tv_weights, phase_factor)
 
     model = SSPMNet(Config()).to(device)
     masker = QuadPolSpatialMasker(keep_prob=cfg.mask_keep_prob).to(device)
@@ -251,6 +309,10 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         ri_msg = (f" RI(mode={cfg.ri_mode},w={cfg.ri_weight},"
                   f"guide_tv={cfg.guide_tv},"
                   f"guide_nlm={cfg.guide_nlm})" if ri_pair is not None else "")
+        if pha is not None:
+            ri_msg += (f" PH(b={cfg.phase_smooth_boost},"
+                       f"s={cfg.phase_surface_boost},p={cfg.phase_protect},"
+                       f"f={cfg.phase_fidelity})")
         print(f"  [train] iters={n_iters} lr={cfg.lr} tv_mult={cfg.tv_mult} "
               f"speckle_factor={cfg.use_speckle_factor} hist={cfg.hist_lambda} "
               f"nl={cfg.nlm_lambda} ema={cfg.use_ema} tta={cfg.use_tta}{ri_msg}")
@@ -287,6 +349,9 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                     c_r = tgt[:, rec_ch:rec_ch + 1] / _L1_RATIO
                     v_c = v[:, ch:ch + 1]
                     nll_r = 0.5 * torch.log(v_c) + (c_r ** 2) / v_c
+                    if fid_w is not None:            # phase feedback
+                        return ((1 - w_r) * (nll[:, ch:ch + 1] * fid_w).mean()
+                                + w_r * (nll_r * fid_w).mean())
                     return ((1 - w_r) * nll[:, ch:ch + 1].mean()
                             + w_r * nll_r.mean())
 
@@ -300,12 +365,18 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
 
                 # Cross-pol: opposite component of own channel +
                 # (reciprocity) of the reciprocal channel — both
-                # independent of the input
+                # independent of the input. With phase feedback, pixels
+                # whose observation is noise-dominated (low HV-VH phase
+                # coherence) contribute less to the data term.
                 w_r = cfg.merlin_recip_weight
-                l_hv = ((1 - w_r) * (d[:, 1:2] - tgt[:, 1:2]).abs().mean()
-                        + w_r * (d[:, 1:2] - tgt[:, 2:3]).abs().mean())
-                l_vh = ((1 - w_r) * (d[:, 2:3] - tgt[:, 2:3]).abs().mean()
-                        + w_r * (d[:, 2:3] - tgt[:, 1:2]).abs().mean())
+
+                def _wmean(t):
+                    return (t * fid_w).mean() if fid_w is not None else t.mean()
+
+                l_hv = ((1 - w_r) * _wmean((d[:, 1:2] - tgt[:, 1:2]).abs())
+                        + w_r * _wmean((d[:, 1:2] - tgt[:, 2:3]).abs()))
+                l_vh = ((1 - w_r) * _wmean((d[:, 2:3] - tgt[:, 2:3]).abs())
+                        + w_r * _wmean((d[:, 2:3] - tgt[:, 1:2]).abs()))
                 loss_xpol = (l_hv + l_vh) / 2
         else:
             m = masker(noisy_t)
@@ -338,7 +409,8 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         l_pol = polarization_consistency_loss(d)
         l_bound = bound_loss(d)
         l_nl = (polarimetric_nl_loss(d, nl_ref if nl_ref is not None else noisy_t,
-                                     cfg.nlm_window, cfg.nlm_sigma)
+                                     cfg.nlm_window, cfg.nlm_sigma,
+                                     pixel_weight=nl_w)
                 if cfg.nlm_lambda > 0 else torch.tensor(0.0, device=device))
 
         # Speckle factorization + histogram matching

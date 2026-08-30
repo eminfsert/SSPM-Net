@@ -1,0 +1,19 @@
+
+=== PH-b3 ===
+  [pre-warmup] 50 steps, final loss=0.17375
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== PH-b5 ===
+  [pre-warmup] 50 steps, final loss=0.16635
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=5.0,s=0.0,p=0.0,f=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+Real-data metrics (noisy-reference; ratio-ENL ideal ~= 1)
+  Method        corr(HV,VH)  ENL-ROI(HV)  ENL-ROI(HH)      EPI(HV)     SSIM(HV)     ENLr(HH)     ENLr(HV)
+  baseline           0.9874       1.3060       0.9328       0.7234       0.4223       1.0131       0.1368
+  winner             0.9932       1.5496       1.1922       0.6692       0.3102       0.8939       0.7378
+  PH-b1.5            0.9932       1.5382       1.2199       0.6617       0.3069       0.8761       0.6540
+  PH-b3              0.9934       1.5533       1.2346       0.6538       0.3013       0.8582       0.6348
+  PH-b5              0.9938       1.5607       1.2399       0.6493       0.2972       0.8396       0.5584
+Saved results/ri_compare/compare_real_phase2.png

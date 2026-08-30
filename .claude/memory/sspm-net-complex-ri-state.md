@@ -5,10 +5,12 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 640618ad-8457-4d1a-9ad3-8ef5881117f1
-  modified: 2026-08-29T22:58:57.745Z
+  modified: 2026-08-30T00:00:00.000Z
 ---
 
-Work done 2026-08-29 on branch `feature/complex-ri-merlin` (commit 89a8f3e; main untouched, NOT pushed to GitHub yet — no gh auth on the machine).
+Work done 2026-08-29 on branch `feature/complex-ri-merlin`; main untouched. Branch IS pushed to GitHub (origin/feature/complex-ri-merlin, HEAD fe0a612 as of 2026-08-30). NOTE: the clone's fetch refspec may be main-only — run `git fetch origin 'refs/heads/*:refs/remotes/origin/*'` on a fresh VM to see the feature branch.
+
+**Phase-feedback work (2026-08-30, same branch):** `sspmnet/phase_data.py` — the folded [0,π] uint8 phase files DO carry usable cross-channel evidence via the doubled angle 2φ: HV–VH phase agreement = per-pixel SNR map (reciprocity: shared speckle, thermal noise breaks phase agreement; mean coherence 0.655, ~0 on water/roads). Trainer knobs: `phase_smooth_boost` (TV/NLM ×(1+b·(1−snr))), `phase_fidelity` (cross-pol data term ×(1−f·(1−snr))), plus untested-by-default `phase_surface_boost`/`phase_protect`. Winner+PH(b=3,f=0.5): synthetic-GT ENL-ROI(HV) +122%, ENL-ROI(HH) +14% at equal PSNR, true EPI(HV) 0.768→0.782; b=5 → ENL(HV) +177% for −0.1dB; b=8 degrades. Real urban patch: ENL-ROI texture-saturated (small gains), ENLr(HV) drops (fidelity pushes noise floor down — intended), corr(HV,VH) up. Synthetic protocol now simulates reciprocity (shared xpol speckle + σ_n bisection-calibrated to real coherence 0.655). Reproduce: `python scripts/compare_ri.py --merlin --phase`.
 
 **What was built:** `sspmnet/complex_data.py` (quad-pol TIFF loader from data/tiff, |Re|/|Im| pseudo-amplitude pair, L1 conditional-median calibration ×1.7456), trainer `ri_mode="targets"|"merlin"`, `merlin_loss="l1"|"nll"`, guided TV (`guide_edge_weights`) + Lee-style CV gate (`guide_cv_protect`), `scripts/compare_ri.py`.
 
@@ -20,4 +22,4 @@ Work done 2026-08-29 on branch `feature/complex-ri-merlin` (commit 89a8f3e; main
 - `merlin_loss="nll"` collapses dark cross-pol channels to zero (black HV) — documented, default stays "l1".
 - MERLIN output sits on the median convention (~13% darker channel means); corr/ENL/EPI are scale-invariant, MAD/RMSE are not — report scale-normalized MAD.
 
-**Open items:** push branch (needs `gh auth login`); optional flat/rural patch test; try to obtain signed float SLC for the C3 covariance route (future work). CAUTION: this is a Colab VM — results/ri_compare/*.npy+png and this memory die with the runtime; only the pushed git branch is durable.
+**Open items:** optional flat/rural patch test; try to obtain signed float SLC for the C3 covariance route (future work). CAUTION: this is a Colab VM — results/ri_compare/*.npy+png and this memory die with the runtime; only the pushed git branch is durable.

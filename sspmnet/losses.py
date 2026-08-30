@@ -119,6 +119,20 @@ def guide_edge_weights(guide_amp: torch.Tensor, alpha: float = 3.0,
     return weight_h, weight_w
 
 
+def modulate_edge_weights(weights, factor: torch.Tensor):
+    """Multiply TV edge-weight maps by a per-pixel factor map.
+
+    ``weights`` is the ``(weight_h, weight_w)`` pair from
+    :func:`guide_edge_weights` (shapes (B,1,H-1,W) / (B,1,H,W-1));
+    ``factor`` is a (B,1,H,W) map (e.g. the phase-feedback smoothing boost),
+    averaged onto each edge's two endpoints, as in the CV gate.
+    """
+    weight_h, weight_w = weights
+    f_h = 0.5 * (factor[:, :, 1:, :] + factor[:, :, :-1, :])
+    f_w = 0.5 * (factor[:, :, :, 1:] + factor[:, :, :, :-1])
+    return weight_h * f_h, weight_w * f_w
+
+
 def polarization_consistency_loss(denoised: torch.Tensor) -> torch.Tensor:
     """HV ~ VH reciprocity constraint (channels 1 and 2)."""
     return (denoised[:, 1:2] - denoised[:, 2:3]).abs().mean()
@@ -130,12 +144,15 @@ def bound_loss(denoised: torch.Tensor) -> torch.Tensor:
 
 
 def polarimetric_nl_loss(x: torch.Tensor, ref: torch.Tensor,
-                         window: int = 7, sigma: float = 0.1) -> torch.Tensor:
+                         window: int = 7, sigma: float = 0.1,
+                         pixel_weight: torch.Tensor = None) -> torch.Tensor:
     """Non-local self-similarity loss.
 
     Weights neighbors by similarity in the reference image and pulls each
     pixel toward its non-local weighted average, encouraging consistency in
-    homogeneous regions without blurring edges.
+    homogeneous regions without blurring edges. ``pixel_weight``
+    ((B, 1, H, W), mean ~1) spatially modulates the pull — e.g. the phase
+    feedback map boosts it where the observation is noise-dominated.
     """
     B, C, H, W = x.shape
     pad = window // 2
@@ -150,7 +167,10 @@ def polarimetric_nl_loss(x: torch.Tensor, ref: torch.Tensor,
 
     x_unf = F.unfold(x, kernel_size=window, padding=pad).view(B, C, K, H, W)
     x_avg = (x_unf * w_norm.unsqueeze(1)).sum(dim=2)
-    return ((x - x_avg) ** 2).mean()
+    sq = (x - x_avg) ** 2
+    if pixel_weight is not None:
+        sq = sq * pixel_weight
+    return sq.mean()
 
 
 # ====================================================================== #

@@ -1,0 +1,43 @@
+real HV-VH doubled-angle coherence (win=7): 0.655
+calibrated sigma_n = 11.161 (0.15 x xpol RMS), sim coherence = 0.654
+
+=== synthetic winner ===
+  [pre-warmup] 50 steps, final loss=0.12836
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synthetic PH-b1.5-f0.5 ===
+  [pre-warmup] 50 steps, final loss=0.12842
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=1.5,s=0.0,p=0.0,f=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synthetic PH-b3-f0.5 ===
+  [pre-warmup] 50 steps, final loss=0.12851
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synthetic PH-b1.5-f0.8 ===
+  [pre-warmup] 50 steps, final loss=0.12844
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=1.5,s=0.0,p=0.0,f=0.8)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synthetic PH-b1.5-f0 ===
+  [pre-warmup] 50 steps, final loss=0.12856
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=1.5,s=0.0,p=0.0,f=0.0)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synthetic PH-b0-f0.5 ===
+  [pre-warmup] 50 steps, final loss=0.12837
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=0.0,s=0.0,p=0.0,f=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+Ground-truth metrics (vs. the KNOWN clean; scale-matched)
+  Method            PSNR(HH)    PSNR(HV)   SSIM*(HH)   SSIM*(HV)    EPI*(HH)    EPI*(HV)
+  Noisy              16.3338     14.7915      0.5919      0.5928      0.6431      0.5975
+  winner             23.5354     21.0760      0.7787      0.7746      0.8239      0.7683
+  PH-b1.5-f0.5       23.5333     21.1825      0.7766      0.7828      0.8246      0.7836
+  PH-b3-f0.5         23.4986     21.1509      0.7731      0.7805      0.8220      0.7820
+  PH-b1.5-f0.8       23.5294     21.0602      0.7751      0.7793      0.8255      0.7826
+  PH-b1.5-f0         23.5263     21.1973      0.7775      0.7811      0.8239      0.7790
+  PH-b0-f0.5         23.5393     21.2126      0.7777      0.7842      0.8250      0.7817
+done

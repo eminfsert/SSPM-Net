@@ -15,3 +15,13 @@ root. See CLAUDE.md for the findings they support.
 6. run_real_v3.py      — winner (ri_mode="merlin", tv_mult=10,
                          guide_cv_protect=0.3) validated on the real patch,
                          incl. ratio-image ENL
+
+## Phase-feedback session (2026-08-30)
+
+7. run_phase_real.py   — baseline / RI winner / winner+PH(defaults) on the
+                         real patch; regenerates denoised_baseline.npy
+8. run_phase_synth.py  — GT protocol with reciprocity physics (shared
+                         cross-pol speckle + calibrated thermal noise);
+                         b/f ablation sweep -> b3-f0.5 balanced winner
+9. run_phase_synth2.py — stronger boosts b5 / b8 (b8 starts degrading)
+10. run_phase_real2.py — b3 / b5 validated on the real patch + figure

@@ -1,0 +1,14 @@
+noisy identical to round 1: False
+
+=== synthetic PH-b5-f0.5 ===
+  [pre-warmup] 50 steps, final loss=0.12723
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=5.0,s=0.0,p=0.0,f=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+PH-b5-f0.5: PSNR(HH)=23.5082 PSNR(HV)=21.0624 SSIM(HH)=0.7717 SSIM(HV)=0.7778 EPI(HH)=0.8216 EPI(HV)=0.7813 ENLroi(HV)=172.30 ENLroi(HH)=122.56
+
+=== synthetic PH-b8-f0.5 ===
+  [pre-warmup] 50 steps, final loss=0.12713
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=8.0,s=0.0,p=0.0,f=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+PH-b8-f0.5: PSNR(HH)=23.4502 PSNR(HV)=20.9440 SSIM(HH)=0.7678 SSIM(HV)=0.7736 EPI(HH)=0.8186 EPI(HV)=0.7781 ENLroi(HV)=225.80 ENLroi(HH)=136.03
+done

@@ -1,0 +1,5 @@
+Method            ENLroi(HV)  ENLroi(HH)
+Noisy                   0.75        0.61
+winner                 62.31      100.85
+PH-b3-f0.5            138.13      114.87
+PH-b5-f0.5            172.30      122.56

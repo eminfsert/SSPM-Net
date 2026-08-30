@@ -1,0 +1,4 @@
+  Method        corr(HV,VH)  ENL-ROI(HV)  ENL-ROI(HH)      EPI(HV)     SSIM(HV)     ENLr(HH)     ENLr(HV)
+  baseline           0.9874       1.3060       0.9328       0.7234       0.4223       1.0131       0.1368
+  winner             0.9932       1.5496       1.1922       0.6692       0.3102       0.8939       0.7378
+  winner+PH          0.9932       1.5382       1.2199       0.6617       0.3069       0.8761       0.6540

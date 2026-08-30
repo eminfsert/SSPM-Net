@@ -32,7 +32,7 @@ res = denoise(amp, TrainConfig(iters=700, ri_mode="merlin",
                                tv_mult=10.0, guide_cv_protect=0.3,
                                phase_smooth_boost=3.0, phase_fidelity=0.5,
                                whiteness_lambda=0.05, whiteness_lags=(3, 4, 5),
-                               polish=0.5),
+                               polish=0.5, edge_boost=1.0),
               ri_pair=ri, pha=pha)
 ```
 
@@ -96,6 +96,18 @@ PSNR(HV); b=8 starts degrading accuracy. Reproduce with
   (results/ri_compare/compare_polish_zoom.png). Self-referential NLM
   reference (`nl_self_refresh`) HURT all metrics — negative result,
   default 0.
+
+- Edge sharpening (2026-08-30, same session): user noted edges still soft
+  ("a median filter also gives high ENL"). Gradient-matching edge LOSS
+  (edge_sharp_lambda) FAILED both with span targets (collapses dark
+  cross-pol: PSNR(HV) 8.7) and per-channel 2-look targets (re-injects
+  speckle, ENL 163->23) — any noisy guide's gradients poison the match;
+  documented negative, default 0. What WORKS: `edge_boost=1.0` —
+  edge-masked unsharp of the final output (mask = span log-grad + 0.3x
+  phase snr-coherence grad, rational squash, widened; per-channel dark
+  gate `edge_boost_dark=0.2` mandatory, else real ENLr(HV) collapses
+  0.65->0.18). GT: PSNR(HH) +0.18 dB, EPI 0.8273/0.7911->0.8315/0.7920
+  (both up), ENL unchanged; real: noisy-EPI up, ENLr(HH) 0.843->0.866.
 
 **Open items:** flat/rural patch test (also the natural place where
 `phase_surface_boost` could help); real-data value of `phase_protect` /

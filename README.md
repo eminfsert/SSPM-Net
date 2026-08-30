@@ -225,6 +225,18 @@ it defaults to off):
   (CV gate + the phase `det` map) — grain has many similar neighbors in
   the cleaned image and averages out; edges and point targets don't.
 
+- **Edge-masked unsharp** (`edge_boost`, e.g. `1.0`): the regularizers and
+  TTA leave edges soft even where they are perfectly located; one unsharp
+  pass masked to true edge locations (multi-look span gradients fused
+  with the phase snr-coherence gradients — edge evidence independent of
+  amplitude speckle) restores their steepness. A per-channel dark gate
+  (`edge_boost_dark`) keeps dark cross-pol pixels out of the boost.
+  GT-validated: PSNR(HH) +0.18 dB, EPI up in BOTH channels, ENL
+  unchanged. (Matching output gradients to a guide's via a loss was also
+  tried and is kept as a documented negative result — every available
+  guide's own gradients carry speckle, and matching them collapses dark
+  channels; `edge_sharp_lambda` stays 0.)
+
 On the ground-truth protocol, PH + whiteness + polish(0.5) improves
 every accuracy metric over the phase-feedback config (PSNR +0.12/+0.21 dB,
 EPI(HH/HV) 0.823/0.785 → 0.827/0.791) while raising ENL-ROI to 141/163

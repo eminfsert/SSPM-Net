@@ -177,6 +177,37 @@ def polarimetric_nl_loss(x: torch.Tensor, ref: torch.Tensor,
     return sq.mean()
 
 
+def edge_fidelity_loss(d: torch.Tensor, guide_log: torch.Tensor,
+                       edge_w=None) -> torch.Tensor:
+    """Edge-sharpness fidelity: match the output's LOG-domain gradients to
+    the multi-look guide's at edges.
+
+    TV / non-local regularization and TTA averaging wash edge profiles
+    out; this term pulls them back to the (far sharper) ~8-look guide.
+    The log domain makes the gradients contrast ratios, so the guide's
+    span scale vs. the per-channel amplitude scale cancels.
+
+    ``guide_log`` : (B, C, H, W) log-amplitude of the smoothed PER-CHANNEL
+        guide — the gradient target must be each channel's own (matching a
+        dark cross-pol channel to the bright span's gradients collapses
+        it); where a channel is flat its own target is ~0, so shared edge
+        LOCATIONS with per-channel TARGETS are safe.
+    ``edge_w``    : optional ((B,1,H-1,W), (B,1,H,W-1)) weights focusing
+        the loss on true edge locations (normalized span gradients fused
+        with the phase snr-coherence gradients).
+    """
+    d_log = 0.5 * torch.log(d ** 2 + 1e-4)
+    dh = d_log[:, :, 1:, :] - d_log[:, :, :-1, :]
+    dw = d_log[:, :, :, 1:] - d_log[:, :, :, :-1]
+    gh = guide_log[:, :, 1:, :] - guide_log[:, :, :-1, :]
+    gw = guide_log[:, :, :, 1:] - guide_log[:, :, :, :-1]
+    if edge_w is None:
+        return (dh - gh).abs().mean() + (dw - gw).abs().mean()
+    w_h, w_w = edge_w
+    return (((dh - gh).abs() * w_h).sum() / (w_h.sum() * d.shape[1] + 1e-8)
+            + ((dw - gw).abs() * w_w).sum() / (w_w.sum() * d.shape[1] + 1e-8))
+
+
 def nl_polish(x: torch.Tensor, guide: torch.Tensor = None, window: int = 9,
               sigma: float = 0.1, strength: float = 0.5,
               protect: torch.Tensor = None) -> torch.Tensor:

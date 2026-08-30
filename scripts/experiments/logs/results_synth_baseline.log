@@ -1,0 +1,14 @@
+=== synthetic baseline (amplitude-only) ===
+  [pre-warmup] 50 steps, final loss=0.11451
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True
+  step    1/700 loss=1.9246
+  step  100/700 loss=0.8924
+  step  200/700 loss=0.7829
+  step  300/700 loss=0.6779
+  step  400/700 loss=0.6373
+  step  500/700 loss=0.5889
+  step  600/700 loss=0.5842
+  step  700/700 loss=0.5690
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+baseline   PSNR(HH)=23.0165 PSNR(HV)=21.3365 SSIM(HH)=0.7292 SSIM(HV)=0.7382 EPI(HH)=0.7950 EPI(HV)=0.7740 ENL(HH)=40.7 ENL(HV)=289.4
+final      PSNR(HH)=23.6383 PSNR(HV)=21.3888 SSIM(HH)=0.7815 SSIM(HV)=0.7943 EPI(HH)=0.8273 EPI(HV)=0.7911 ENL(HH)=141.3 ENL(HV)=162.6

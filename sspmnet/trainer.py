@@ -31,7 +31,7 @@ from .losses import (
     MaskedL1Loss, adaptive_tv_loss, polarization_consistency_loss, bound_loss,
     polarimetric_nl_loss, compute_reference_histogram, compute_soft_histogram,
     warmup_target_4ch, guide_edge_weights, modulate_edge_weights, _box_blur,
-    nl_polish, ratio_whiteness_loss,
+    nl_polish, ratio_whiteness_loss, edge_fidelity_loss,
 )
 from .phase_data import phase_feedback_maps
 from .complex_data import _L1_RATIO
@@ -131,6 +131,27 @@ class TrainConfig:
                                     # length: (1,2,3) for white simulated
                                     # speckle, (3,4,5) for the oversampled
                                     # real data (lag-1 autocorr ~0.5 there)
+    edge_sharp_lambda: float = 0.0  # [NEGATIVE RESULT — keep 0] gradient-
+                                    # matching edge loss: every guide's own
+                                    # gradients carry speckle, so matching
+                                    # them re-injects noise (ENL collapses)
+                                    # and can crush dark channels; kept for
+                                    # the record
+    edge_boost: float = 0.0         # edge-masked unsharp of the FINAL
+                                    # output: d + k*M*(d - blur(d)), mask M
+                                    # from the multi-look span + phase snr
+                                    # gradients — restores the edge
+                                    # steepness that TV/NLM/TTA soften
+                                    # (GT-validated: raises PSNR/SSIM/EPI
+                                    # at ~no ENL cost; ~1.0 recommended)
+    edge_boost_dark: float = 0.2    # dark-suppression of the boost mask:
+                                    # x mu_ch/(mu_ch+t) — without it dark
+                                    # cross-pol pixels get amplified
+                                    # residue (real ENLr(HV) collapses)
+    edge_phase_weight: float = 0.3  # share of the phase snr-coherence
+                                    # gradient fused into the edge weights
+                                    # (edge evidence independent of
+                                    # amplitude speckle; needs pha)
     polish: float = 0.0             # final-stage non-local refinement
                                     # strength in [0, 1] (0 = off); edge/
                                     # point pixels are protected by a CV
@@ -278,6 +299,44 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
 
     nl_ref0 = nl_ref            # initial (static) non-local reference
 
+    # ── Edge-sharpness fidelity: precompute the guide's log gradients and
+    #    the edge weights (amplitude multi-look + optional phase snr) ──
+    guide_log = edge_w = edge_full = None
+    if cfg.edge_sharp_lambda > 0 or cfg.edge_boost > 0:
+        with torch.no_grad():
+            if ri_pair is not None:
+                g_span = (ri_t ** 2).mean(dim=(0, 1)).sqrt()[None, None]
+                # per-channel gradient TARGET: each channel's own 2-look mean
+                g_ch = _box_blur(0.5 * (ar_t + ai_t), k=3, passes=2)
+            else:
+                g_span = (noisy_t ** 2).mean(dim=1, keepdim=True).sqrt()
+                g_ch = _box_blur(noisy_t, k=3, passes=2)
+            guide_log = 0.5 * torch.log(g_ch ** 2 + 1e-4)
+            # edge LOCATIONS from the reliable multi-look span
+            span_log = 0.5 * torch.log(
+                _box_blur(g_span, k=3, passes=2) ** 2 + 1e-6)
+            e_h = (span_log[:, :, 1:, :] - span_log[:, :, :-1, :]).abs()
+            e_w = (span_log[:, :, :, 1:] - span_log[:, :, :, :-1]).abs()
+            if pha is not None and cfg.edge_phase_weight > 0:
+                snr_s = _box_blur(snr_t, k=3, passes=1)
+                p_h = (snr_s[:, :, 1:, :] - snr_s[:, :, :-1, :]).abs()
+                p_w = (snr_s[:, :, :, 1:] - snr_s[:, :, :, :-1]).abs()
+                e_h = e_h / (e_h.mean() + 1e-8) \
+                    + cfg.edge_phase_weight * p_h / (p_h.mean() + 1e-8)
+                e_w = e_w / (e_w.mean() + 1e-8) \
+                    + cfg.edge_phase_weight * p_w / (p_w.mean() + 1e-8)
+            norm = 0.5 * (e_h.mean() + e_w.mean()) + 1e-8
+            e_h, e_w = e_h / norm, e_w / norm
+            # rational soft mask: ~0 on speckle-level gradients, ->1 on edges
+            edge_w = (e_h ** 2 / (1.0 + e_h ** 2), e_w ** 2 / (1.0 + e_w ** 2))
+            # full-pixel edge map (for polish protection)
+            ef = torch.zeros_like(g_span)
+            ef[:, :, 1:, :] = torch.maximum(ef[:, :, 1:, :], edge_w[0])
+            ef[:, :, :-1, :] = torch.maximum(ef[:, :, :-1, :], edge_w[0])
+            ef[:, :, :, 1:] = torch.maximum(ef[:, :, :, 1:], edge_w[1])
+            ef[:, :, :, :-1] = torch.maximum(ef[:, :, :, :-1], edge_w[1])
+            edge_full = ef
+
     model = SSPMNet(Config()).to(device)
     masker = QuadPolSpatialMasker(keep_prob=cfg.mask_keep_prob).to(device)
     crit = MaskedL1Loss()
@@ -350,6 +409,9 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                        f"s={cfg.phase_surface_boost},p={cfg.phase_protect},"
                        f"f={cfg.phase_fidelity})")
         if cfg.nl_self_refresh > 0 or cfg.polish > 0 or cfg.whiteness_lambda > 0:
+            if cfg.edge_sharp_lambda > 0 or cfg.edge_boost > 0:
+                ri_msg += (f" EDGE(l={cfg.edge_sharp_lambda},"
+                           f"boost={cfg.edge_boost},pw={cfg.edge_phase_weight})")
             ri_msg += (f" RF(selfref={cfg.nl_self_refresh},"
                        f"lam_end={cfg.nlm_lambda_end},"
                        f"white={cfg.whiteness_lambda},polish={cfg.polish})")
@@ -459,6 +521,9 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         l_white = (ratio_whiteness_loss(d, noisy_t, lags=cfg.whiteness_lags)
                    if cfg.whiteness_lambda > 0
                    else torch.tensor(0.0, device=device))
+        l_edge = (edge_fidelity_loss(d, guide_log, edge_w)
+                  if cfg.edge_sharp_lambda > 0
+                  else torch.tensor(0.0, device=device))
 
         # Speckle factorization + histogram matching
         if cfg.use_speckle_factor and S_real is not None:
@@ -486,6 +551,7 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 + cfg.bound_lambda * l_bound
                 + nlm_lam * l_nl
                 + cfg.whiteness_lambda * l_white
+                + cfg.edge_sharp_lambda * l_edge
                 + cfg.hist_lambda * l_hist
                 + cfg.lambda_fact * l_fact)
 
@@ -584,9 +650,21 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             prot = torch.sigmoid((cv_g - thr) / (0.25 * thr))
             if det_t is not None:
                 prot = torch.maximum(prot, det_t)
+            if edge_full is not None:
+                prot = torch.maximum(prot, edge_full)
             acc = nl_polish(acc, window=cfg.polish_window,
                             sigma=cfg.polish_sigma, strength=cfg.polish,
                             protect=prot).clamp(0, 1)
+
+    # ── Edge-masked unsharp: restore edge steepness on the final output ──
+    if cfg.edge_boost > 0 and edge_full is not None:
+        with torch.no_grad():
+            m_edge = _box_blur(edge_full, k=3, passes=1)   # widen the mask
+            if cfg.edge_boost_dark > 0:                    # per-channel dark gate
+                mu_ch = _box_blur(acc, k=9, passes=1)
+                m_edge = m_edge * (mu_ch / (mu_ch + cfg.edge_boost_dark))
+            acc = (acc + cfg.edge_boost * m_edge
+                   * (acc - _box_blur(acc, k=3, passes=1))).clamp(0, 1)
 
     if verbose:
         src = "EMA" if (cfg.use_ema and model_ema is not None) else "raw"

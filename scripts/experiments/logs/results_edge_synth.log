@@ -1,0 +1,19 @@
+
+=== edge lambda=0.5 ===
+  [pre-warmup] 50 steps, final loss=0.12708
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.5,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+edge0.5: PSNR=21.4737/9.7378 SSIM=0.6993/0.0673 EPI=0.6871/0.2248 ENL=116.5/0.1
+
+=== edge lambda=1.0 ===
+  [pre-warmup] 50 steps, final loss=0.12706
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+edge1.0: PSNR=21.9683/8.7006 SSIM=0.7117/0.1126 EPI=0.7039/0.1242 ENL=100.2/0.0
+
+=== edge lambda=2.0 ===
+  [pre-warmup] 50 steps, final loss=0.12706
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=2.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+edge2.0: PSNR=21.7649/8.6334 SSIM=0.7118/0.0825 EPI=0.6899/0.1248 ENL=74.4/0.0
+done  (reference final: PSNR=23.6383/21.3888 SSIM=0.7815/0.7943 EPI=0.8273/0.7911 ENL=141.3/162.6)

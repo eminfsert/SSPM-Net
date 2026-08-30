@@ -34,3 +34,12 @@ root. See CLAUDE.md for the findings they support.
                           C+B is the combined winner
 12. run_polish_real.py  — real-patch validation of PH-b3 + C(lags 3-5) +
                           B(0.5), incl. zoom-crop figure
+
+## Edge-sharpening + baseline-comparison session (2026-08-30, cont.)
+
+13. run_synth_baseline.py — amplitude-only baseline on the GT protocol
+                            (baseline vs final with true PSNR/SSIM/EPI)
+14. run_edge_synth.py     — gradient-matching edge loss sweep: FAILS
+                            (see logs; documented negative, default 0);
+                            the working edge_boost was tuned post-hoc
+                            (see metrics_edge_synth.txt + CLAUDE.md)

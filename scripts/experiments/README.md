@@ -25,3 +25,12 @@ root. See CLAUDE.md for the findings they support.
                          b/f ablation sweep -> b3-f0.5 balanced winner
 9. run_phase_synth2.py — stronger boosts b5 / b8 (b8 starts degrading)
 10. run_phase_real2.py — b3 / b5 validated on the real patch + figure
+
+## Residual-speckle refinement session (2026-08-30, later)
+
+11. run_polish_synth.py — GT test of self-ref NLM (A: hurts, off by
+                          default), final NL polish (B: big ENL, tiny cost)
+                          and ratio-whiteness loss (C: best accuracy gain);
+                          C+B is the combined winner
+12. run_polish_real.py  — real-patch validation of PH-b3 + C(lags 3-5) +
+                          B(0.5), incl. zoom-crop figure

@@ -1,0 +1,14 @@
+
+=== PH-b3 + C(white, lags 3-5) ===
+  [pre-warmup] 50 steps, final loss=0.16979
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.0)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+Real-data metrics
+  Method          corr(HV,VH)  ENL-ROI(HV)  ENL-ROI(HH)      EPI(HV)     SSIM(HV)     ENLr(HH)     ENLr(HV)
+  winner               0.9932       1.5496       1.1922       0.6692       0.3102       0.8939       0.7378
+  PH-b3                0.9934       1.5533       1.2346       0.6538       0.3013       0.8582       0.6348
+  PH-b3+B0.5           0.9938       1.5775       1.2563       0.6428       0.2941       0.8457       0.6340
+  PH-b3+C              0.9932       1.5635       1.2397       0.6534       0.3037       0.8554       0.6515
+  PH-b3+C+B0.5         0.9936       1.5877       1.2616       0.6424       0.2965       0.8429       0.6505
+Saved figures

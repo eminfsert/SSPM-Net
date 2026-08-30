@@ -145,7 +145,8 @@ def bound_loss(denoised: torch.Tensor) -> torch.Tensor:
 
 def polarimetric_nl_loss(x: torch.Tensor, ref: torch.Tensor,
                          window: int = 7, sigma: float = 0.1,
-                         pixel_weight: torch.Tensor = None) -> torch.Tensor:
+                         pixel_weight: torch.Tensor = None,
+                         sigma_map: torch.Tensor = None) -> torch.Tensor:
     """Non-local self-similarity loss.
 
     Weights neighbors by similarity in the reference image and pulls each
@@ -153,6 +154,8 @@ def polarimetric_nl_loss(x: torch.Tensor, ref: torch.Tensor,
     homogeneous regions without blurring edges. ``pixel_weight``
     ((B, 1, H, W), mean ~1) spatially modulates the pull — e.g. the phase
     feedback map boosts it where the observation is noise-dominated.
+    ``sigma_map`` ((B, 1, H, W)) replaces the scalar ``sigma`` per pixel —
+    a larger sigma accepts more neighbors, averaging harder.
     """
     B, C, H, W = x.shape
     pad = window // 2
@@ -161,7 +164,8 @@ def polarimetric_nl_loss(x: torch.Tensor, ref: torch.Tensor,
     ref_unf = F.unfold(ref, kernel_size=window, padding=pad).view(B, C, K, H, W)
     ref_self = ref.unsqueeze(2)
     dist = ((ref_unf - ref_self) ** 2).sum(dim=1)
-    w = torch.exp(-dist / (sigma * sigma + 1e-12))
+    sig2 = (sigma_map ** 2 if sigma_map is not None else sigma * sigma)
+    w = torch.exp(-dist / (sig2 + 1e-12))
     w[:, K // 2, :, :] = 0.0
     w_norm = w / (w.sum(dim=1, keepdim=True) + 1e-8)
 
@@ -171,6 +175,68 @@ def polarimetric_nl_loss(x: torch.Tensor, ref: torch.Tensor,
     if pixel_weight is not None:
         sq = sq * pixel_weight
     return sq.mean()
+
+
+def nl_polish(x: torch.Tensor, guide: torch.Tensor = None, window: int = 9,
+              sigma: float = 0.1, strength: float = 0.5,
+              protect: torch.Tensor = None) -> torch.Tensor:
+    """Final-stage non-local refinement of a denoised image.
+
+    One guided-NLM pass whose similarity weights come from the (already
+    clean) output itself, blended back with per-pixel strength:
+
+        out = (1 - s_px) * x + s_px * NLM_avg(x)
+        s_px = strength * (1 - protect)
+
+    Unlike a blur, dissimilar neighbors get ~zero weight, so edges and
+    point targets are preserved while residual speckle grain — which has
+    many similar neighbors in the cleaned image — is averaged out.
+    ``protect`` ((B, 1, H, W), in [0, 1]) shuts the refinement off on
+    heterogeneous / deterministic pixels (CV gate, phase 'det' map).
+    """
+    with torch.no_grad():
+        if guide is None:
+            guide = _box_blur(x, k=3, passes=1)
+        B, C, H, W = x.shape
+        pad = window // 2
+        K = window * window
+        g_unf = F.unfold(guide, kernel_size=window, padding=pad).view(B, C, K, H, W)
+        dist = ((g_unf - guide.unsqueeze(2)) ** 2).sum(dim=1)
+        w = torch.exp(-dist / (sigma * sigma + 1e-12))
+        w[:, K // 2, :, :] = 0.0
+        w_norm = w / (w.sum(dim=1, keepdim=True) + 1e-8)
+        x_unf = F.unfold(x, kernel_size=window, padding=pad).view(B, C, K, H, W)
+        avg = (x_unf * w_norm.unsqueeze(1)).sum(dim=2)
+        s_px = strength * (1.0 - protect) if protect is not None else strength
+        return (1.0 - s_px) * x + s_px * avg
+
+
+def ratio_whiteness_loss(denoised: torch.Tensor, noisy: torch.Tensor,
+                         lags=(1, 2, 3), eps: float = 1e-3) -> torch.Tensor:
+    """Spatial-whiteness penalty on the intensity ratio image.
+
+    For a perfect result the ratio noisy^2 / denoised^2 is pure speckle —
+    spatially WHITE (for critically sampled data). Residual speckle left
+    in the output structures the ratio instead; penalizing the ratio's
+    small-lag autocorrelation (after local-mean normalization, which
+    removes scene-level structure) actively pushes that residue out.
+
+    CAUTION: oversampled real data has correlated speckle, so keep the
+    lags above the oversampling correlation length there (or use only on
+    simulated speckle, which is white by construction).
+    """
+    r = (noisy ** 2 + eps) / (denoised ** 2 + eps)
+    mu = _box_blur(r, k=9, passes=1)
+    e = r / (mu + 1e-6) - 1.0
+    var = (e ** 2).mean() + 1e-8
+    loss = denoised.new_zeros(())
+    for lag in lags:
+        for dim in (-2, -1):
+            n = e.shape[dim] - lag
+            a = e.narrow(dim, 0, n)
+            b = e.narrow(dim, lag, n)
+            loss = loss + ((a * b).mean() / var) ** 2
+    return loss
 
 
 # ====================================================================== #

@@ -77,7 +77,8 @@ def main():
         kw = {}
         if pha_a is not None:      # validated phase-feedback config
             kw = dict(guide_cv_protect=0.3, phase_smooth_boost=3.0,
-                      phase_fidelity=0.5)
+                      phase_fidelity=0.5, whiteness_lambda=0.05,
+                      whiteness_lags=(3, 4, 5), polish=0.5)
         cfg = TrainConfig(iters=args.iters, ri_weight=args.ri_weight,
                           guide_alpha=args.guide_alpha, ri_mode=mode, **kw)
         res = denoise(amp, cfg, ri_pair=ri_pair, pha=pha_a)

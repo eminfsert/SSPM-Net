@@ -1,0 +1,26 @@
+
+=== synthetic base(PH-b3) ===
+  [pre-warmup] 50 steps, final loss=0.12702
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synthetic +A(selfNLM) ===
+  [pre-warmup] 50 steps, final loss=0.12724
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) RF(selfref=100,lam_end=1.5,white=0.0,polish=0.0)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synthetic +C(white) ===
+  [pre-warmup] 50 steps, final loss=0.12704
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.0)
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+Ground-truth metrics (vs KNOWN clean; scale-matched) + ENL
+  Method                 PSNR(HH)   PSNR(HV)   SSIM(HH)   SSIM(HV)    EPI(HH)    EPI(HV) ENLroi(HV) ENLroi(HH)
+  base(PH-b3)             23.5198    21.1741     0.7738     0.7827     0.8228     0.7845   140.4939   119.7984
+  +A(selfNLM)             23.4364    21.0862     0.7674     0.7757     0.8191     0.7789   134.0970   110.9665
+  +C(white)               23.6790    21.4059     0.7860     0.7971     0.8289     0.7933   119.7370   120.8828
+  base(PH-b3)+B0.3        23.4963    21.1649     0.7713     0.7811     0.8219     0.7833   170.0700   130.3965
+  base(PH-b3)+B0.5        23.4793    21.1577     0.7695     0.7799     0.8212     0.7823   192.8521   137.3646
+  +A(selfNLM)+B0.3        23.4123    21.0760     0.7647     0.7740     0.8182     0.7776   161.7698   120.4265
+  +A(selfNLM)+B0.5        23.3949    21.0683     0.7629     0.7728     0.8174     0.7766   183.0058   126.6385
+done

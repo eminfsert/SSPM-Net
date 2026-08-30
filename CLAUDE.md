@@ -30,9 +30,14 @@ amp, ri = load_quadpol_tiffs("data/tiff")           # L1-calibrated |Re|/|Im|
 pha = load_quadpol_phase("data/tiff")               # folded [0,pi] phase
 res = denoise(amp, TrainConfig(iters=700, ri_mode="merlin",
                                tv_mult=10.0, guide_cv_protect=0.3,
-                               phase_smooth_boost=3.0, phase_fidelity=0.5),
+                               phase_smooth_boost=3.0, phase_fidelity=0.5,
+                               whiteness_lambda=0.05, whiteness_lags=(3, 4, 5),
+                               polish=0.5),
               ri_pair=ri, pha=pha)
 ```
+
+(whiteness_lags=(1,2,3) on simulated white speckle; (3,4,5) on the real
+patch — its speckle lag-1 autocorrelation is ~0.5 from oversampling.)
 
 RI winner vs. the amplitude-only baseline: true EPI (vs clean) 0.81→0.83,
 best SSIM, PSNR(HH) +0.24 dB, ENL-ROI +12–27%, ratio-ENL(HV) 0.75 vs 0.36.
@@ -79,6 +84,18 @@ PSNR(HV); b=8 starts degrading accuracy. Reproduce with
 - MERLIN outputs sit on the L1/median scale convention (~13% darker channel
   means); corr/ENL/EPI are scale-invariant, MAD/RMSE are not — report
   scale-normalized MAD.
+
+- Residual-speckle refinement (2026-08-30, later session): ratio-whiteness
+  loss (`whiteness_lambda=0.05`) improves EVERY GT accuracy metric
+  (PSNR +0.12/+0.21 dB, EPI(HH/HV) 0.823/0.785→0.829/0.793) — the best
+  single addition since MERLIN; final non-local polish (`polish=0.5`,
+  guided by the output itself, CV+det protected) is a near-free ENL
+  multiplier (GT ENL-ROI(HV) 140→163 combined, →193 alone at s=0.5).
+  Combined real-patch: ENL-ROI(HH) 1.19→1.26, ENL-ROI(HV) 1.55→1.59,
+  corr up, visibly less grain in the zoom crops
+  (results/ri_compare/compare_polish_zoom.png). Self-referential NLM
+  reference (`nl_self_refresh`) HURT all metrics — negative result,
+  default 0.
 
 **Open items:** flat/rural patch test (also the natural place where
 `phase_surface_boost` could help); real-data value of `phase_protect` /

@@ -204,6 +204,33 @@ with true EPI(HV) improving 0.768 → 0.782 (`b=5` trades a further ENL
 gain, +177%, for ~0.1 dB of PSNR(HV)). Reproduce with
 `python scripts/compare_ri.py --merlin --phase`.
 
+### Optional: residual-speckle refinement — whiteness loss + non-local polish
+
+Two further mechanisms remove the residual grain that survives the
+regularizers, without blurring (both validated on the ground-truth
+protocol; a third — refreshing the non-local reference from the model's
+own EMA output, `nl_self_refresh` — was tried and HURT every metric, so
+it defaults to off):
+
+- **Ratio-whiteness loss** (`whiteness_lambda`, e.g. `0.05`): for a
+  perfect result the intensity ratio noisy²/output² is pure speckle —
+  spatially white. Residual speckle left in the output *structures* the
+  ratio; penalizing its small-lag autocorrelation actively pushes that
+  residue out. On oversampled real data keep the lags above the speckle
+  correlation length (`whiteness_lags=(3, 4, 5)`; lag-1 autocorrelation
+  of the bundled patch's speckle is ~0.5 and is NOT residue).
+- **Final non-local polish** (`polish`, e.g. `0.5`): one guided-NLM pass
+  on the finished output using the output itself as the similarity guide,
+  blended per pixel and shut off on heterogeneous / deterministic pixels
+  (CV gate + the phase `det` map) — grain has many similar neighbors in
+  the cleaned image and averages out; edges and point targets don't.
+
+On the ground-truth protocol, PH + whiteness + polish(0.5) improves
+every accuracy metric over the phase-feedback config (PSNR +0.12/+0.21 dB,
+EPI(HH/HV) 0.823/0.785 → 0.827/0.791) while raising ENL-ROI to 141/163
+(HH/HV; the amplitude-only baseline sits at ~100/62). The
+`--merlin --phase` reproduction command includes both refinements.
+
 Two RI modes are available via `TrainConfig.ri_mode`:
 
 - `"targets"` (default): the amplitude pipeline is kept and the masked

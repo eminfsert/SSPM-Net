@@ -31,6 +31,7 @@ from .losses import (
     MaskedL1Loss, adaptive_tv_loss, polarization_consistency_loss, bound_loss,
     polarimetric_nl_loss, compute_reference_histogram, compute_soft_histogram,
     warmup_target_4ch, guide_edge_weights, modulate_edge_weights, _box_blur,
+    nl_polish, ratio_whiteness_loss,
 )
 from .phase_data import phase_feedback_maps
 from .complex_data import _L1_RATIO
@@ -105,6 +106,37 @@ class TrainConfig:
                                     # positive median biases dark pixels
                                     # up): x (1 - f * (1 - snr)), mean-1
                                     # renormalized; 0 disables
+
+    # Residual-speckle refinement
+    nl_self_refresh: int = 0        # every N steps, rebuild the non-local
+                                    # reference from the EMA model's own
+                                    # output (0 = keep the static guide) —
+                                    # a cleaner reference gives far more
+                                    # accurate similar-patch weights
+    nl_self_mix: float = 0.7        # share of the EMA output in the
+                                    # refreshed reference (the rest stays
+                                    # on the initial guide, avoiding
+                                    # self-confirmation drift)
+    nlm_lambda_end: float = 0.0     # >0: ramp nlm_lambda linearly to this
+                                    # value over training (pull harder as
+                                    # the reference gets cleaner)
+    nlm_sigma_noise: float = 0.0    # >0 with pha: per-pixel NLM sigma
+                                    # sigma*(1 + k*(1-snr)) — noise-
+                                    # dominated pixels accept more
+                                    # neighbors and average harder
+    whiteness_lambda: float = 0.0   # spatial-whiteness penalty on the
+                                    # ratio image (see losses.py)
+    whiteness_lags: tuple = (1, 2, 3)  # autocorrelation lags to penalize —
+                                    # keep ABOVE the speckle correlation
+                                    # length: (1,2,3) for white simulated
+                                    # speckle, (3,4,5) for the oversampled
+                                    # real data (lag-1 autocorr ~0.5 there)
+    polish: float = 0.0             # final-stage non-local refinement
+                                    # strength in [0, 1] (0 = off); edge/
+                                    # point pixels are protected by a CV
+                                    # gate (+ the phase 'det' map)
+    polish_window: int = 9
+    polish_sigma: float = 0.1
 
     # EMA
     use_ema: bool = True
@@ -215,24 +247,26 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
 
     # ── Phase feedback maps: per-pixel noise/structure evidence from the
     #    folded quad-pol phase (see sspmnet.phase_data) ──
-    phase_factor = fid_w = nl_w = None
+    phase_factor = fid_w = nl_w = det_t = nl_sigma_map = None
     if pha is not None:
         pm = pha if isinstance(pha, dict) else phase_feedback_maps(
             pha=np.asarray(pha, dtype=np.float32), win=cfg.phase_win)
         snr_t = torch.from_numpy(pm["snr"]).float()[None, None].to(device)
         noise_map = 1.0 - snr_t                       # 1 = noise-dominated
+        det_t = torch.from_numpy(pm["det"]).float()[None, None].to(device)
         boost = 1.0 + cfg.phase_smooth_boost * noise_map
         if cfg.phase_surface_boost > 0:
             surf_t = torch.from_numpy(pm["surface"]).float()[None, None].to(device)
             boost = boost + cfg.phase_surface_boost * surf_t
         if cfg.phase_protect > 0:
-            det_t = torch.from_numpy(pm["det"]).float()[None, None].to(device)
             boost = boost * (1.0 - cfg.phase_protect * det_t)
         phase_factor = boost                          # (1, 1, H, W)
         nl_w = phase_factor / phase_factor.mean()     # mean-1 for L_nl
         if cfg.phase_fidelity > 0:
             fw = 1.0 - cfg.phase_fidelity * noise_map
             fid_w = fw / fw.mean()                    # mean-1 data weight
+        if cfg.nlm_sigma_noise > 0:
+            nl_sigma_map = cfg.nlm_sigma * (1.0 + cfg.nlm_sigma_noise * noise_map)
         if tv_weights is None:
             # no multi-look guide available: build edge weights from the
             # (1-look) span so the phase factor has something to modulate
@@ -241,6 +275,8 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 span_g, alpha=cfg.guide_alpha,
                 cv_protect=cfg.guide_cv_protect or None)
         tv_weights = modulate_edge_weights(tv_weights, phase_factor)
+
+    nl_ref0 = nl_ref            # initial (static) non-local reference
 
     model = SSPMNet(Config()).to(device)
     masker = QuadPolSpatialMasker(keep_prob=cfg.mask_keep_prob).to(device)
@@ -313,6 +349,10 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             ri_msg += (f" PH(b={cfg.phase_smooth_boost},"
                        f"s={cfg.phase_surface_boost},p={cfg.phase_protect},"
                        f"f={cfg.phase_fidelity})")
+        if cfg.nl_self_refresh > 0 or cfg.polish > 0 or cfg.whiteness_lambda > 0:
+            ri_msg += (f" RF(selfref={cfg.nl_self_refresh},"
+                       f"lam_end={cfg.nlm_lambda_end},"
+                       f"white={cfg.whiteness_lambda},polish={cfg.polish})")
         print(f"  [train] iters={n_iters} lr={cfg.lr} tv_mult={cfg.tv_mult} "
               f"speckle_factor={cfg.use_speckle_factor} hist={cfg.hist_lambda} "
               f"nl={cfg.nlm_lambda} ema={cfg.use_ema} tta={cfg.use_tta}{ri_msg}")
@@ -408,10 +448,17 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         l_tv = adaptive_tv_loss(d, noisy_t, weights=tv_weights)
         l_pol = polarization_consistency_loss(d)
         l_bound = bound_loss(d)
+        nlm_lam = cfg.nlm_lambda
+        if cfg.nlm_lambda_end > 0 and n_iters > 1:
+            nlm_lam = (cfg.nlm_lambda + (cfg.nlm_lambda_end - cfg.nlm_lambda)
+                       * step / (n_iters - 1))
         l_nl = (polarimetric_nl_loss(d, nl_ref if nl_ref is not None else noisy_t,
                                      cfg.nlm_window, cfg.nlm_sigma,
-                                     pixel_weight=nl_w)
+                                     pixel_weight=nl_w, sigma_map=nl_sigma_map)
                 if cfg.nlm_lambda > 0 else torch.tensor(0.0, device=device))
+        l_white = (ratio_whiteness_loss(d, noisy_t, lags=cfg.whiteness_lags)
+                   if cfg.whiteness_lambda > 0
+                   else torch.tensor(0.0, device=device))
 
         # Speckle factorization + histogram matching
         if cfg.use_speckle_factor and S_real is not None:
@@ -437,7 +484,8 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         loss = (eff_mask_w * (loss_copol + loss_xpol)
                 + eff_tv * l_tv + cfg.lambda_pol * l_pol
                 + cfg.bound_lambda * l_bound
-                + cfg.nlm_lambda * l_nl
+                + nlm_lam * l_nl
+                + cfg.whiteness_lambda * l_white
                 + cfg.hist_lambda * l_hist
                 + cfg.lambda_fact * l_fact)
 
@@ -455,6 +503,22 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                     p_ema.data.mul_(cfg.ema_decay).add_(p.data, alpha=1.0 - cfg.ema_decay)
                 if S_real is not None and S_real_ema is not None:
                     S_real_ema.mul_(cfg.ema_decay).add_(S_real.detach(), alpha=1.0 - cfg.ema_decay)
+
+        # ── Self-referential non-local reference refresh ──
+        if (cfg.nl_self_refresh > 0 and cfg.nlm_lambda > 0
+                and (step + 1) % cfg.nl_self_refresh == 0):
+            ref_model = model_ema if (cfg.use_ema and model_ema is not None) else model
+            was_training = ref_model.training
+            ref_model.eval()                       # deterministic (no dropout)
+            with torch.no_grad():
+                pred = torch.zeros_like(noisy_t)
+                for x_base in infer_inputs:
+                    pred += ref_model(x_base).clamp(0, 1)
+                pred /= len(infer_inputs)
+            if was_training:
+                ref_model.train()
+            base = nl_ref0 if nl_ref0 is not None else noisy_t
+            nl_ref = cfg.nl_self_mix * pred + (1.0 - cfg.nl_self_mix) * base
 
         # ── Periodic snapshot (visualization only; no metric-based selection) ──
         if (step + 1) % cfg.snapshot_every == 0 or step == 0:
@@ -505,6 +569,25 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             return acc_f / cnt
 
     acc = _final_infer()                          # all 4 channels, same model
+
+    # ── Final-stage non-local polish (edge-/point-protected) ──
+    if cfg.polish > 0:
+        with torch.no_grad():
+            if ri_pair is not None:
+                g_amp = (ri_t ** 2).mean(dim=(0, 1)).sqrt()[None, None]
+            else:
+                g_amp = (noisy_t ** 2).mean(dim=1, keepdim=True).sqrt()
+            mu_g = _box_blur(g_amp, k=9, passes=1)
+            m2_g = _box_blur(g_amp ** 2, k=9, passes=1)
+            cv_g = torch.sqrt((m2_g - mu_g ** 2).clamp(min=0)) / (mu_g + 1e-6)
+            thr = cfg.guide_cv_protect if cfg.guide_cv_protect > 0 else 0.3
+            prot = torch.sigmoid((cv_g - thr) / (0.25 * thr))
+            if det_t is not None:
+                prot = torch.maximum(prot, det_t)
+            acc = nl_polish(acc, window=cfg.polish_window,
+                            sigma=cfg.polish_sigma, strength=cfg.polish,
+                            protect=prot).clamp(0, 1)
+
     if verbose:
         src = "EMA" if (cfg.use_ema and model_ema is not None) else "raw"
         print(f"  [final] {src} weights @ step {n_iters}"

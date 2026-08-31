@@ -1,2 +1,77 @@
 
 === final {} ===
+  [pre-warmup] 50 steps, final loss=0.16883
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.8500
+  step  100/700 loss=1.1172
+  step  200/700 loss=0.9333
+  step  300/700 loss=0.8229
+  step  400/700 loss=0.7662
+  step  500/700 loss=0.7364
+  step  600/700 loss=0.7268
+  step  700/700 loss=0.7200
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== surf0.5 {'phase_surface_boost': 0.5} ===
+  [pre-warmup] 50 steps, final loss=0.16939
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.5,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.8703
+  step  100/700 loss=1.1230
+  step  200/700 loss=0.9363
+  step  300/700 loss=0.8245
+  step  400/700 loss=0.7653
+  step  500/700 loss=0.7357
+  step  600/700 loss=0.7257
+  step  700/700 loss=0.7192
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== surf1.0 {'phase_surface_boost': 1.0} ===
+  [pre-warmup] 50 steps, final loss=0.17291
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=1.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.9130
+  step  100/700 loss=1.1310
+  step  200/700 loss=0.9385
+  step  300/700 loss=0.8246
+  step  400/700 loss=0.7678
+  step  500/700 loss=0.7383
+  step  600/700 loss=0.7267
+  step  700/700 loss=0.7199
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== prot0.3 {'phase_protect': 0.3} ===
+  [pre-warmup] 50 steps, final loss=0.17033
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.3,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.8384
+  step  100/700 loss=1.1179
+  step  200/700 loss=0.9304
+  step  300/700 loss=0.8215
+  step  400/700 loss=0.7650
+  step  500/700 loss=0.7356
+  step  600/700 loss=0.7264
+  step  700/700 loss=0.7202
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== prot0.6 {'phase_protect': 0.6} ===
+  [pre-warmup] 50 steps, final loss=0.16804
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.6,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.8070
+  step  100/700 loss=1.1104
+  step  200/700 loss=0.9316
+  step  300/700 loss=0.8213
+  step  400/700 loss=0.7649
+  step  500/700 loss=0.7353
+  step  600/700 loss=0.7265
+  step  700/700 loss=0.7200
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+surface-stratified ROIs: low mean 0.372, high mean 0.372
+
+Real-patch metrics (noisy-reference EPI/SSIM; ratio-ENL ideal ~= 1)
+  Method      corr(HV,VH)  ENL-ROI(HH)  ENL-ROI(HV)  ENLsurf(HV)  ENLflat(HV)      EPI(HH)      EPI(HV)     SSIM(HV)     ENLr(HH)     ENLr(HV)
+  final            0.9924       1.2035       1.4962       1.4962       1.4962       0.6925       0.6563       0.3119       0.8777       0.4390
+  surf0.5          0.9926       1.2108       1.5168       1.5168       1.5168       0.6883       0.6518       0.3092       0.8741       0.4337
+  surf1.0          0.9927       1.2240       1.5319       1.5319       1.5319       0.6834       0.6483       0.3072       0.8709       0.4281
+  prot0.3          0.9927       1.1962       1.5098       1.5098       1.5098       0.6966       0.6583       0.3157       0.8864       0.4061
+  prot0.6          0.9925       1.1847       1.4906       1.4906       1.4906       0.7015       0.6622       0.3150       0.8964       0.4669
+
+Saved results/ri_compare/compare_phase_extra.png

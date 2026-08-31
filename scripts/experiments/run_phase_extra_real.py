@@ -35,12 +35,27 @@ FULL = dict(iters=700, ri_mode="merlin", merlin_loss="l1", tv_mult=10.0,
             whiteness_lambda=0.05, whiteness_lags=(3, 4, 5),
             polish=0.5, edge_boost=1.0)
 
+# ── Controls ────────────────────────────────────────────────────────────
+# The trainer applies the phase factor to the TV edge weights WITHOUT
+# renormalizing (``tv_weights *= phase_factor``), so a knob that shifts the
+# factor's MEAN is partly just a global tv_mult change; only the NLM term
+# sees a mean-1 normalized version, i.e. the map's SHAPE.  For each knob we
+# therefore also run a control with a spatially CONSTANT factor of the same
+# mean (tv_mult scaled by that ratio) -- if the control matches the knob,
+# the map contributes nothing beyond a scalar amount of smoothing.
+base = 1.0 + FULL["phase_smooth_boost"] * (1.0 - maps["snr"])
+r_surf = float((base + 1.0 * maps["surface"]).mean() / base.mean())
+r_prot = float((base * (1.0 - 0.6 * maps["det"])).mean() / base.mean())
+print(f"mean-factor ratios vs 'final': surf1.0 {r_surf:.4f}, prot0.6 {r_prot:.4f}")
+
 VARIANTS = [
     ("final",      {}),
     ("surf0.5",    dict(phase_surface_boost=0.5)),
     ("surf1.0",    dict(phase_surface_boost=1.0)),
     ("prot0.3",    dict(phase_protect=0.3)),
     ("prot0.6",    dict(phase_protect=0.6)),
+    ("ctrl-surf",  dict(tv_mult=10.0 * r_surf)),   # same mean as surf1.0
+    ("ctrl-prot",  dict(tv_mult=10.0 * r_prot)),   # same mean as prot0.6
 ]
 
 runs = {}
@@ -51,20 +66,24 @@ for name, extra in VARIANTS:
         runs[name] = np.load(f)
         continue
     print(f"\n=== {name} {extra} ===", flush=True)
-    res = denoise(amp, TrainConfig(**FULL, **extra), ri_pair=ri, pha=pha)
+    cfg_kw = {**FULL, **extra}
+    res = denoise(amp, TrainConfig(**cfg_kw), ri_pair=ri, pha=pha)
     runs[name] = res["denoised"]
     np.save(f, res["denoised"])
 
 # ── ROIs: picked once on the noisy HV channel, then stratified by 'surface'
-rois, rs = find_top_k_rois(amp[1], top_k=40)
+rois10, rs = find_top_k_rois(amp[1])          # same convention as earlier runs
+# Stratification needs a POOL, and the default CV<=0.7 / 64 px filter only
+# passes 8 ROIs on this urban patch -- use 32 px ROIs with a relaxed CV gate.
+pool, rs_s = find_top_k_rois(amp[1], roi_size=32, top_k=400, cv_max=1.0)
 surf = maps["surface"]
-by_surf = sorted(rois, key=lambda ij: surf[ij[0]:ij[0]+rs, ij[1]:ij[1]+rs].mean())
-lo_rois, hi_rois = by_surf[:10], by_surf[-10:]
-rois10 = rois[:10]
-print(f"\nsurface-stratified ROIs: low mean "
-      f"{np.mean([surf[i:i+rs, j:j+rs].mean() for i, j in lo_rois]):.3f}, "
-      f"high mean "
-      f"{np.mean([surf[i:i+rs, j:j+rs].mean() for i, j in hi_rois]):.3f}")
+by_surf = sorted(pool, key=lambda ij: surf[ij[0]:ij[0]+rs_s, ij[1]:ij[1]+rs_s].mean())
+n = max(10, len(pool) // 5)
+lo_rois, hi_rois = by_surf[:n], by_surf[-n:]
+print(f"\nROIs: {len(rois10)} @ {rs} px (main table); stratification pool "
+      f"{len(pool)} @ {rs_s} px, {n} per group -- mean 'surface' low "
+      f"{np.mean([surf[i:i+rs_s, j:j+rs_s].mean() for i, j in lo_rois]):.3f}, "
+      f"high {np.mean([surf[i:i+rs_s, j:j+rs_s].mean() for i, j in hi_rois]):.3f}")
 
 
 def ratio_enl(d, c):
@@ -84,7 +103,7 @@ for name, d in runs.items():
     rec = reciprocity_metrics(d[1], d[2])
     vals = [rec["corr"], enl_roi_multi(d[0], rois10, rs),
             enl_roi_multi(d[1], rois10, rs),
-            enl_roi_multi(d[1], hi_rois, rs), enl_roi_multi(d[1], lo_rois, rs),
+            enl_roi_multi(d[1], hi_rois, rs_s), enl_roi_multi(d[1], lo_rois, rs_s),
             epi_metric(amp[0], d[0]), epi_metric(amp[1], d[1]),
             ssim_metric(amp[1], d[1]), ratio_enl(d, 0), ratio_enl(d, 1)]
     line = "  {:<10}".format(name) + "".join(f"{v:>13.4f}" for v in vals)

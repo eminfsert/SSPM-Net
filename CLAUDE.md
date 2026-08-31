@@ -120,6 +120,20 @@ Copies of the persistent memory files live in `.claude/memory/`. On a fresh
 VM (project cloned to /content/SSPM-Net), restore with:
 
 ```bash
-mkdir -p /root/.claude/projects/-content-SSPM-Net/memory
-cp .claude/memory/* /root/.claude/projects/-content-SSPM-Net/memory/
+# the project dir slug follows Claude Code's working directory:
+# /content -> -content ; /content/SSPM-Net -> -content-SSPM-Net
+mkdir -p /root/.claude/projects/-content/memory
+cp .claude/memory/* /root/.claude/projects/-content/memory/
 ```
+
+Also widen the clone's fetch refspec before looking for the branch (fresh
+Colab clones are often main-only):
+
+```bash
+git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+git fetch origin && git checkout feature/complex-ri-merlin
+```
+
+Checkpoint often: the Colab VM is ephemeral, so commit + push code, metric
+tables, `CLAUDE.md` and `.claude/memory/` to the feature branch at regular
+intervals.

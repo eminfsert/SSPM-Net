@@ -154,3 +154,64 @@ def load_quadpol_tiffs(tiff_dir: str, prefix: str = None,
         sat = (amp >= 255.0) | (re_raw >= 255.0) | (im_raw >= 255.0)
         return amp, ri_pair, sat
     return amp, ri_pair
+
+
+def load_scene_patches(scene_dir: str, calibrate: str = "l1"):
+    """Load every quad-pol patch found in ``scene_dir``.
+
+    Patches follow the single-patch naming convention
+    ``{prefix}{pol}_{comp}.tiff`` where ``prefix`` typically encodes the
+    tile origin (e.g. ``1_patch_3584_0_512_``). A patch is recognized by
+    its ``*hh_amp.tiff`` file; per-patch ``.npy`` amplitude files named
+    ``{prefix}amp.npy`` (full dynamic range) are used INSTEAD of the uint8
+    amp TIFF when present.
+
+    Returns
+    -------
+    list of dicts, one per patch, sorted by prefix:
+        'prefix' : str
+        'amp'    : (4, H, W) float32
+        'ri'     : (2, 4, H, W) float32 (calibrated), or None if the
+                   real/imgy files are missing
+        'sat'    : (4, H, W) bool, or None
+        'pha'    : (4, H, W) float32 folded [0, pi] phase, or None
+    """
+    from .phase_data import load_quadpol_phase
+
+    cands = sorted(glob.glob(os.path.join(scene_dir, "*hh_amp.tiff")))
+    if not cands:
+        raise FileNotFoundError(f"no '*hh_amp.tiff' found in {scene_dir}")
+    patches = []
+    for f in cands:
+        base = os.path.basename(f)
+        prefix = base[: base.index("hh_amp.tiff")]
+        entry = {"prefix": prefix}
+        have_ri = os.path.exists(
+            os.path.join(scene_dir, f"{prefix}hh_real.tiff"))
+        if have_ri:
+            amp, ri, sat = load_quadpol_tiffs(
+                scene_dir, prefix=prefix, calibrate=calibrate,
+                return_sat=True)
+        else:
+            amp = np.stack([
+                _read_tiff(os.path.join(scene_dir, f"{prefix}{pol}_amp.tiff"))
+                for pol in POLS
+            ])
+            ri, sat = None, None
+        npy_f = os.path.join(scene_dir, f"{prefix}amp.npy")
+        if os.path.exists(npy_f):
+            amp_full = np.load(npy_f).astype(np.float32)
+            if have_ri:                     # recalibrate RI onto the full scale
+                re_abs, im_abs = np.abs(ri[0]), np.abs(ri[1])
+                ri = calibrate_ri(amp_full, re_abs, im_abs, mode=calibrate) \
+                    if calibrate else ri
+            amp = amp_full
+        entry["amp"] = amp.astype(np.float32)
+        entry["ri"] = ri
+        entry["sat"] = sat
+        try:
+            entry["pha"] = load_quadpol_phase(scene_dir, prefix=prefix)
+        except (FileNotFoundError, OSError):
+            entry["pha"] = None
+        patches.append(entry)
+    return patches

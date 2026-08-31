@@ -14,7 +14,9 @@ from .config import Config
 from .model import SSPMNet, SARDenoiser, DenoiseBranch, ChannelRefinement
 from .masking import QuadPolSpatialMasker, BernoulliMasker
 from .trainer import TrainConfig, denoise
-from .complex_data import load_quadpol_tiffs, calibrate_ri
+from .complex_data import (load_quadpol_tiffs, calibrate_ri,
+                           load_scene_patches)
+from .scene_trainer import denoise_scene
 from .phase_data import load_quadpol_phase, phase_feedback_maps
 from . import metrics, losses, complex_data, phase_data
 
@@ -24,6 +26,7 @@ __all__ = [
     "QuadPolSpatialMasker", "BernoulliMasker",
     "TrainConfig", "denoise",
     "load_quadpol_tiffs", "calibrate_ri",
+    "load_scene_patches", "denoise_scene",
     "load_quadpol_phase", "phase_feedback_maps",
     "metrics", "losses", "complex_data", "phase_data",
 ]

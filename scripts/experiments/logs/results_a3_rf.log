@@ -6,3 +6,95 @@
 [cached] arch_real_pixel_group.npy
 
 === synth pg-lv2 ===
+  [pre-warmup] 50 steps, final loss=0.03072
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=0.9803
+  step  100/700 loss=0.8444
+  step  200/700 loss=0.7690
+  step  300/700 loss=0.6845
+  step  400/700 loss=0.6360
+  step  500/700 loss=0.6116
+  step  600/700 loss=0.6027
+  step  700/700 loss=0.6011
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== real pg-lv2 ===
+  [pre-warmup] 50 steps, final loss=0.03738
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.1164
+  step  100/700 loss=0.9611
+  step  200/700 loss=0.8138
+  step  300/700 loss=0.7058
+  step  400/700 loss=0.6514
+  step  500/700 loss=0.6253
+  step  600/700 loss=0.6155
+  step  700/700 loss=0.6131
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synth pg-lv3 ===
+  [pre-warmup] 50 steps, final loss=0.03169
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=0.9810
+  step  100/700 loss=0.8464
+  step  200/700 loss=0.7704
+  step  300/700 loss=0.6843
+  step  400/700 loss=0.6356
+  step  500/700 loss=0.6111
+  step  600/700 loss=0.6020
+  step  700/700 loss=0.6002
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== real pg-lv3 ===
+  [pre-warmup] 50 steps, final loss=0.04014
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.1176
+  step  100/700 loss=0.9631
+  step  200/700 loss=0.8112
+  step  300/700 loss=0.7048
+  step  400/700 loss=0.6507
+  step  500/700 loss=0.6257
+  step  600/700 loss=0.6153
+  step  700/700 loss=0.6128
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synth pg-lv2-dil ===
+  [pre-warmup] 50 steps, final loss=0.03158
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=0.9827
+  step  100/700 loss=0.8453
+  step  200/700 loss=0.7692
+  step  300/700 loss=0.6840
+  step  400/700 loss=0.6351
+  step  500/700 loss=0.6108
+  step  600/700 loss=0.6017
+  step  700/700 loss=0.6002
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== real pg-lv2-dil ===
+  [pre-warmup] 50 steps, final loss=0.03827
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.1174
+  step  100/700 loss=0.9621
+  step  200/700 loss=0.8126
+  step  300/700 loss=0.7054
+  step  400/700 loss=0.6514
+  step  500/700 loss=0.6260
+  step  600/700 loss=0.6161
+  step  700/700 loss=0.6137
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+Synthetic-GT (vs known clean; scale-matched)
+  Method         PSNR(HH)   PSNR(HV)   SSIM(HH)   SSIM(HV)    EPI(HH)    EPI(HV)    ENL(HH)    ENL(HV)
+  pg-lv1          24.4842    22.9406     0.8340     0.8382     0.8400     0.8278  4629.5763   560.6299
+  pg-lv2          24.2320    22.8390     0.8272     0.8309     0.8339     0.8257  4613.7447  1665.9036
+  pg-lv3          24.0230    22.5269     0.8182     0.8159     0.8276     0.8126  2113.3961  2477.5314
+  pg-lv2-dil      24.2169    22.7817     0.8243     0.8275     0.8338     0.8244  1501.5234  1126.0164
+
+Real patch (noisy-reference; ratio-ENL ideal ~= 1)
+  Method       corr(HV,VH) ENL-ROI(HH) ENL-ROI(HV)     EPI(HH)     EPI(HV)    ENLr(HH)    ENLr(HV)
+  pg-lv1            0.9996      1.0148      1.2771      0.6770      0.7135      0.9036      1.1198
+  pg-lv2            0.9996      1.0481      1.3392      0.6779      0.7213      0.8960      1.1192
+  pg-lv3            0.9996      1.0750      1.3889      0.6885      0.7186      0.9113      1.0930
+  pg-lv2-dil        0.9996      1.0660      1.3416      0.6769      0.7082      0.8918      1.0939
+
+Saved results/ri_compare/compare_a3_rf.png

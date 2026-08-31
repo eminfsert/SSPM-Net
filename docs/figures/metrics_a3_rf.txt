@@ -1,0 +1,28 @@
+Synthetic-GT (vs known clean; scale-matched)
+  Method         PSNR(HH)   PSNR(HV)   SSIM(HH)   SSIM(HV)    EPI(HH)    EPI(HV)    ENL(HH)    ENL(HV)
+  pg-lv1          24.4842    22.9406     0.8340     0.8382     0.8400     0.8278  4629.5763   560.6299
+  pg-lv2          24.2320    22.8390     0.8272     0.8309     0.8339     0.8257  4613.7447  1665.9036
+  pg-lv3          24.0230    22.5269     0.8182     0.8159     0.8276     0.8126  2113.3961  2477.5314
+  pg-lv2-dil      24.2169    22.7817     0.8243     0.8275     0.8338     0.8244  1501.5234  1126.0164
+
+Real patch (noisy-reference; ratio-ENL ideal ~= 1)
+  Method       corr(HV,VH) ENL-ROI(HH) ENL-ROI(HV)     EPI(HH)     EPI(HV)    ENLr(HH)    ENLr(HV)
+  pg-lv1            0.9996      1.0148      1.2771      0.6770      0.7135      0.9036      1.1198
+  pg-lv2            0.9996      1.0481      1.3392      0.6779      0.7213      0.8960      1.1192
+  pg-lv3            0.9996      1.0750      1.3889      0.6885      0.7186      0.9113      1.0930
+  pg-lv2-dil        0.9996      1.0660      1.3416      0.6769      0.7082      0.8918      1.0939
+
+Verdict (A3): MARGINAL on top of the pixel+group base — wavelet_levels
+stays 1. The RF hypothesis was formed BEFORE the A1/A2 fix; that fix
+absorbed the headroom it targeted:
+ * GT accuracy does not improve — it slips slightly and monotonically
+   with depth (PSNR(HH) 24.48 -> 24.23 -> 24.02; SSIM and EPI likewise).
+   GT ENL(HV) rises hugely (561 -> 2478) but the accuracy metrics no
+   longer back it, unlike the A1/A2 jump where everything rose together.
+ * Real patch shows small consistent homogeneity gains (ENL-ROI(HV)
+   1.277 -> 1.389 at lv3, EPI(HH) 0.677 -> 0.689, ENLr(HV) 1.120 -> 1.093
+   i.e. marginally closer to 1) — real but far below the serious-gain bar.
+ * Dilations (lv2-dil) add nothing over lv2.
+ * Note for the scene-scale work: with 256 px crops a levels=2 model may
+   become relatively MORE useful (crop cuts the effective context); worth
+   re-checking lv2 once during Track B, not as a default.

@@ -171,6 +171,15 @@ ENL-ROI >= +50% at equal EPI.
   Future fix idea: censored one-sided loss (target >= clip) or log-domain
   training. Table: docs/figures/metrics_a4_sat.txt.
 
+- A3 RESULT (2026-08-31): MARGINAL — `wavelet_levels` stays 1. On the new
+  pixel+group base, RF expansion no longer pays: GT accuracy slips
+  monotonically with depth (PSNR(HH) 24.48->24.23->24.02, SSIM/EPI too;
+  the GT ENL(HV) rise 561->2478 is no longer backed by accuracy, unlike
+  the A1/A2 jump). Real patch: small consistent gains (ENL-ROI(HV)
+  1.28->1.39, EPI(HH) 0.677->0.689 at lv3) — below the bar. Dilations add
+  nothing. Re-check lv2 once during scene-scale training (256 px crops cut
+  context). Table: docs/figures/metrics_a3_rf.txt.
+
 **Open items:** flat/rural patch test (the natural place where
 `phase_surface_boost` could still help — an urban patch has little surface
 scattering); a dedicated `tv_mult` sweep (ratio-ENL and ENL-ROI disagree

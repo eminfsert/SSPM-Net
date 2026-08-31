@@ -109,10 +109,32 @@ PSNR(HV); b=8 starts degrading accuracy. Reproduce with
   0.65->0.18). GT: PSNR(HH) +0.18 dB, EPI 0.8273/0.7911->0.8315/0.7920
   (both up), ENL unchanged; real: noisy-EPI up, ENLr(HH) 0.843->0.866.
 
-**Open items:** flat/rural patch test (also the natural place where
-`phase_surface_boost` could help); real-data value of `phase_protect` /
-`phase_surface_boost`; obtain signed float SLC; decide on merging the
-feature branch.
+- Default-off phase knobs settled (2026-08-31): `phase_protect` and
+  `phase_surface_boost` were evaluated on the real patch on top of the full
+  stack, each against a MEAN-MATCHED control (the trainer multiplies the TV
+  edge weights by the phase factor *without* renormalizing, so a knob that
+  shifts the factor's mean is partly just a global `tv_mult` change; only
+  the NLM term sees a mean-1 copy, i.e. the map's shape). Both stay 0.
+  `phase_protect`: matched or beaten by the plain `tv_mult=7.9` control on
+  every metric (EPI(HV) 0.6622 vs 0.6660, ENLr(HV) 0.4669 vs 0.5090) — its
+  `det` map is near estimator noise (independent cross-channel agreement
+  +0.06..+0.09 vs +0.02 for a random-phase null; the +0.71 HV-VH agreement
+  is reciprocity, i.e. the same physical channel, not evidence).
+  `phase_surface_boost`: gains are small (ENL-ROI +1.7%/+2.4% at s=1.0),
+  reproduced by the `tv_mult=11.3` control, and — decisively — absent in
+  the ROIs where the map is high (stratified ENLsurf 1.1376 vs control
+  1.1393); plain `final` still wins on ratio-ENL. The `surface` map is a
+  valid scene descriptor (ENL ~1.9x higher in its high-coherence ROIs) but
+  not a useful regularizer knob on an urban patch. Scripts:
+  `scripts/experiments/diag_phase_maps.py`, `diag_det_reliability.py`,
+  `run_phase_extra_real.py`; tables in `docs/figures/`.
+
+**Open items:** flat/rural patch test (the natural place where
+`phase_surface_boost` could still help — an urban patch has little surface
+scattering); a dedicated `tv_mult` sweep (ratio-ENL and ENL-ROI disagree
+about the operating point: `tv_mult=7.9` gives the best ENLr(HV) 0.509 vs
+0.439 at 10, while ENL-ROI prefers 10); obtain signed float SLC; decide on
+merging the feature branch.
 
 ## Claude memory restore
 

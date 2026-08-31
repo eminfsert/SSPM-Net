@@ -129,6 +129,24 @@ PSNR(HV); b=8 starts degrading accuracy. Reproduce with
   `scripts/experiments/diag_phase_maps.py`, `diag_det_reliability.py`,
   `run_phase_extra_real.py`; tables in `docs/figures/`.
 
+## Serious-gains work — branch `feature/scene-scale-arch` (2026-08-31)
+
+Approved plan (see `.claude/memory/sspm-net-complex-ri-state.md` for full
+state): Track A structural fixes — A1 `dropout_style` ("band" Dropout2d
+historically zeroed the whole 1-ch LL band in ~30% of passes / "pixel"),
+A2 `norm` ("batch"/"group"; BN ran on batch-1 stats and EMA never updated
+buffers), A3 multi-level DWT (`wavelet_levels` now real: scale-recurrent
+shared detail CNN, RF 68->136->256+, params unchanged) + optional
+`low_freq_dilations`, A4 saturation mask (`load_quadpol_tiffs(...,
+return_sat=True)` + `denoise(..., sat=)`; ~10%/channel of uint8 pixels are
+clipped — `data/example_quadpol.npy` is the full-range source of the same
+pixels). Track B scene-scale zero-shot: user will supply ~16 more 512x512
+patches of the SAME scene; batch random-crop training over the patch pool
+(still zero-shot: no external data). `TrainConfig.model_cfg` forwards
+architecture overrides. Experiments: `scripts/experiments/
+run_arch_ablation.py`, `run_a4_sat.py`. Success bar: GT PSNR >= +0.5 dB or
+ENL-ROI >= +50% at equal EPI.
+
 **Open items:** flat/rural patch test (the natural place where
 `phase_surface_boost` could still help — an urban patch has little surface
 scattering); a dedicated `tv_mult` sweep (ratio-ENL and ENL-ROI disagree

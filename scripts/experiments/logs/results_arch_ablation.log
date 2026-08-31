@@ -1,0 +1,14 @@
+  [pre-warmup] 50 steps, final loss=0.19731
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True
+  step    1/700 loss=2.3335
+  step  100/700 loss=1.0915
+  step  200/700 loss=0.9510
+  step  300/700 loss=0.7711
+  step  400/700 loss=0.7230
+  step  500/700 loss=0.6509
+  step  600/700 loss=0.6407
+  step  700/700 loss=0.5966
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+sigma_n=11.167  sim coherence=0.653 (target 0.655)
+
+=== synth final ===

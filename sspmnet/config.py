@@ -25,6 +25,9 @@ class Config:
     #    (class is named ``LowFreqBranch`` for historical reasons)
     low_freq_channels: int = 64
     low_freq_num_blocks: int = 5
+    # per-block conv dilation, e.g. [1, 2, 4, 8, 1] widens the CNN receptive
+    # field ~2.4x with zero extra parameters; None = all 1 (historical)
+    low_freq_dilations: List[int] = None
 
     # ── Swin branch — processes the LL (low-frequency) sub-band ──────
     #    (class is named ``HighFreqBranch`` for historical reasons)

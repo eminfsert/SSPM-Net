@@ -56,7 +56,11 @@ class DenoiseBranch(nn.Module):
         )
         self.drop_ll = make_dropout(drop_p, cfg.dropout_style)
 
-        # CNN processes the detail sub-bands (3 channels: LH, HL, HH)
+        # CNN processes the detail sub-bands (3 channels: LH, HL, HH).
+        # With wavelet_levels > 1 the SAME CNN is applied at every level
+        # (scale-recurrent: identical parameter count, per-level receptive
+        # field doubles with each downsampling).
+        self.levels = max(1, int(cfg.wavelet_levels))
         self.hf_branch = LowFreqBranch(
             in_channels=3,
             mid_channels=cfg.low_freq_channels,
@@ -65,6 +69,7 @@ class DenoiseBranch(nn.Module):
             dropout=drop_p,
             dropout_style=cfg.dropout_style,
             norm=cfg.norm,
+            dilations=cfg.low_freq_dilations,
         )
         self.drop_hf = make_dropout(drop_p, cfg.dropout_style)
 
@@ -79,13 +84,28 @@ class DenoiseBranch(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """x: (B, 1, H, W) -> feature map (B, D, H, W)."""
         _, _, H, W = x.shape
-        low, high = self.freq_decomp.decompose(x)
 
+        # Recursive decomposition: keep each level's detail bands and the
+        # pre-decomposition size (for exact inverse cropping).
+        highs, sizes = [], []
+        low = x
+        for _ in range(self.levels):
+            sizes.append(low.shape[-2:])
+            low, high = self.freq_decomp.decompose(low)
+            highs.append(high)
+
+        # Swin on the coarsest LL; the shared CNN on every detail level.
         ll_out = self.drop_ll(self.ll_branch(low))
-        hf_out = self.drop_hf(self.hf_branch(high))
+        hf_outs = [self.drop_hf(self.hf_branch(h)) for h in highs]
 
+        # Recompose coarsest-first with the raw inverse DWT; the final
+        # (finest) level goes through the learned ReconstructionLayer.
+        out = ll_out
+        for lvl in range(self.levels - 1, 0, -1):
+            out = self.freq_decomp.reconstruct(out, hf_outs[lvl],
+                                               output_size=sizes[lvl])
         return self.drop_recon(
-            self.reconstruction(ll_out, hf_out, output_size=(H, W))
+            self.reconstruction(out, hf_outs[0], output_size=(H, W))
         )
 
 

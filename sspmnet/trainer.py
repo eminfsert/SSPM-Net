@@ -195,7 +195,7 @@ def _resolve_device(name: str) -> torch.device:
 
 
 def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True,
-            ri_pair=None, pha=None):
+            ri_pair=None, pha=None, sat=None):
     """Zero-shot denoise one quad-pol amplitude image.
 
     Parameters
@@ -226,6 +226,11 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         coherence says the observation is noise-dominated, and the
         cross-pol data term is down-weighted there (see the ``phase_*``
         fields of ``TrainConfig``).
+    sat : np.ndarray (4, H, W) bool, optional
+        Per-channel saturation mask (True = the uint8 source was clipped at
+        255; from ``load_quadpol_tiffs(..., return_sat=True)``). Saturated
+        pixels are excluded from the MERLIN L1 data term — their targets
+        carry a truncated bright tail. Regularizers still cover them.
 
     Returns
     -------
@@ -248,6 +253,12 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
     q99 = np.quantile(amp_4ch_raw, 0.99, axis=(1, 2), keepdims=True)
     amp_norm = np.clip(amp_4ch_raw / np.maximum(q99, 1e-9), 0.0, 5.0)
     noisy_t = torch.from_numpy(amp_norm).unsqueeze(0).to(device)
+
+    sat_keep = None
+    if sat is not None:
+        sat_keep = torch.from_numpy(
+            (~np.asarray(sat, dtype=bool)).astype(np.float32)
+        ).unsqueeze(0).to(device)                  # (1, 4, H, W): 1 = usable
 
     # ── Complex (RI) auxiliaries: independent pseudo-amplitude targets,
     #    multi-look edge guide for TV, multi-look reference for the NL loss ──
@@ -464,9 +475,22 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 loss_copol = (pair_loss(0, None) + pair_loss(3, None)) / 2
                 loss_xpol = (pair_loss(1, 2) + pair_loss(2, 1)) / 2
             else:
+                # Weighted mean over usable pixels: excludes saturated
+                # TARGET pixels (sat_keep of the target channel) and, on
+                # cross-pol, applies the mean-1 phase fidelity weight.
+                def _wmean(t, tgt_ch, use_fid=False):
+                    w = None
+                    if sat_keep is not None:
+                        w = sat_keep[:, tgt_ch:tgt_ch + 1]
+                    if use_fid and fid_w is not None:
+                        w = fid_w if w is None else w * fid_w
+                    if w is None:
+                        return t.mean()
+                    return (t * w).sum() / w.sum().clamp(min=1.0)
+
                 # Co-pol: full-pixel L1 N2N vs. the opposite component
-                l_hh = (d[:, 0:1] - tgt[:, 0:1]).abs().mean()
-                l_vv = (d[:, 3:4] - tgt[:, 3:4]).abs().mean()
+                l_hh = _wmean((d[:, 0:1] - tgt[:, 0:1]).abs(), 0)
+                l_vv = _wmean((d[:, 3:4] - tgt[:, 3:4]).abs(), 3)
                 loss_copol = (l_hh + l_vv) / 2
 
                 # Cross-pol: opposite component of own channel +
@@ -475,14 +499,10 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 # whose observation is noise-dominated (low HV-VH phase
                 # coherence) contribute less to the data term.
                 w_r = cfg.merlin_recip_weight
-
-                def _wmean(t):
-                    return (t * fid_w).mean() if fid_w is not None else t.mean()
-
-                l_hv = ((1 - w_r) * _wmean((d[:, 1:2] - tgt[:, 1:2]).abs())
-                        + w_r * _wmean((d[:, 1:2] - tgt[:, 2:3]).abs()))
-                l_vh = ((1 - w_r) * _wmean((d[:, 2:3] - tgt[:, 2:3]).abs())
-                        + w_r * _wmean((d[:, 2:3] - tgt[:, 1:2]).abs()))
+                l_hv = ((1 - w_r) * _wmean((d[:, 1:2] - tgt[:, 1:2]).abs(), 1, True)
+                        + w_r * _wmean((d[:, 1:2] - tgt[:, 2:3]).abs(), 2, True))
+                l_vh = ((1 - w_r) * _wmean((d[:, 2:3] - tgt[:, 2:3]).abs(), 2, True)
+                        + w_r * _wmean((d[:, 2:3] - tgt[:, 1:2]).abs(), 1, True))
                 loss_xpol = (l_hv + l_vh) / 2
         else:
             m = masker(noisy_t)

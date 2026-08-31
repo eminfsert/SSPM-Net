@@ -98,7 +98,7 @@ def calibrate_ri(amp: np.ndarray, re_abs: np.ndarray, im_abs: np.ndarray,
 
 
 def load_quadpol_tiffs(tiff_dir: str, prefix: str = None,
-                       calibrate: str = "l1"):
+                       calibrate: str = "l1", return_sat: bool = False):
     """Load a quad-pol patch from per-component TIFF files.
 
     Expects files named ``{prefix}{pol}_{comp}.tiff`` with
@@ -114,6 +114,12 @@ def load_quadpol_tiffs(tiff_dir: str, prefix: str = None,
         ``*hh_amp.tiff`` file when None.
     calibrate : "l1" | "median" | "mean" | None
         RI calibration mode (see :func:`calibrate_ri`); None skips it.
+    return_sat : bool
+        Also return the per-channel saturation mask: True where ANY of the
+        uint8 source files (amp / real / imgy) is clipped at 255 — on this
+        patch 6.6-6.8% of pixels per channel. Saturated pixels carry a
+        truncated bright tail and should not supervise the MERLIN/RI data
+        term (``denoise(..., sat=sat)``).
 
     Returns
     -------
@@ -135,11 +141,16 @@ def load_quadpol_tiffs(tiff_dir: str, prefix: str = None,
         ])
 
     amp = load("amp")
-    re_abs = np.abs(load("real"))
-    im_abs = np.abs(load("imgy"))
+    re_raw = load("real")
+    im_raw = load("imgy")
+    re_abs = np.abs(re_raw)
+    im_abs = np.abs(im_raw)
 
     if calibrate:
         ri_pair = calibrate_ri(amp, re_abs, im_abs, mode=calibrate)
     else:
         ri_pair = np.stack([re_abs, im_abs]).astype(np.float32)
+    if return_sat:
+        sat = (amp >= 255.0) | (re_raw >= 255.0) | (im_raw >= 255.0)
+        return amp, ri_pair, sat
     return amp, ri_pair

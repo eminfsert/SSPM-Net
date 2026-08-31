@@ -1,0 +1,45 @@
+Diagnostics of the two default-OFF phase feedback maps (real urban patch,
+data/tiff, win=7).  Produced by scripts/experiments/diag_phase_maps.py and
+diag_det_reliability.py.  Null control = same estimator on uniform random
+phase (i.e. what pure estimator noise looks like).
+
+map stats (robust-normalized to [0,1]):
+  snr      mean 0.460  std 0.332  q05 0.000 q50 0.489 q95 1.000
+  surface  mean 0.338  std 0.310  q05 0.000 q50 0.273 q95 1.000
+  det      mean 0.347  std 0.309  q05 0.000 q50 0.292 q95 1.000
+
+correlations with scene descriptors:
+  snr      logspan +0.518  CV(HH) -0.395  depol +0.173  log(HH/VV) -0.024
+  surface  logspan +0.100  CV(HH) -0.206  depol -0.031  log(HH/VV) -0.011
+  det      logspan -0.127  CV(HH) +0.052  depol +0.007  log(HH/VV) +0.008
+  corr(surface, snr) +0.080   corr(det, snr) -0.017   corr(det, surface) +0.087
+
+  det   on brightest 1%: 0.306  vs rest 0.348
+  surf  on brightest 1%: 0.544  vs rest 0.334
+  surf  on low-CV (homogeneous) 0.438 vs high-CV 0.260
+  det   on low-CV 0.330 vs high-CV 0.371
+
+null control (uniform random phase, same estimator):
+  snr      real std 0.332 vs null std 0.306 | corr w/ logspan real +0.518 null +0.003
+  surface  real std 0.310 vs null std 0.306 | corr w/ logspan real +0.100 null -0.000
+  det      real std 0.309 vs null std 0.307 | corr w/ logspan real -0.127 null -0.010
+
+'det' reliability (per-channel spatial coherences must agree if 'det' is a
+scene property; HV-VH agreement is reciprocity, i.e. the SAME channel, so it
+does not count as independent evidence):
+  real  HH-HV +0.073  HH-VH +0.062  HH-VV +0.093
+        HV-VH +0.711  HV-VV +0.086  VH-VV +0.068
+  null  HH-HV +0.028  HH-VH +0.016  HH-VV +0.012
+        HV-VH +0.016  HV-VV +0.017  VH-VV +0.021
+  corr(det, log peak-to-local-mean) +0.048
+  det on top-0.1% point-like pixels 0.405 vs rest 0.347
+  corr(det@win7, det@win15) +0.495  (null +0.322)
+
+Reading: 'snr' is a strong, verified map (0.52 correlation with brightness
+vs 0.00 for the null).  'surface' is weak but physically consistent -- higher
+on homogeneous low-CV areas (0.438 vs 0.260) and anti-correlated with local
+CV -- so it does track distributed/surface scattering, though most of its
+variance is estimator noise.  'det' is close to pure estimator noise: the
+independent cross-channel agreement is +0.06..+0.09 versus +0.02 for the
+null, and it marks point-like targets only faintly (0.405 vs 0.347 on the
+strongest 0.1% peak-to-local-mean pixels, corr +0.048 overall).

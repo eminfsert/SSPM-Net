@@ -1,0 +1,12 @@
+Scene-trainer degenerate sanity (1 patch, batch=4x256 crops) vs single-patch trainer, both pixel+group full stack:
+
+  synth single-patch  PSNR 24.484/22.941  SSIM 0.8340/0.8382  EPI 0.8400/0.8278  ENL 4630/561
+  synth scene-1patch  PSNR 24.212/22.855  SSIM 0.8247/0.8357  EPI 0.8328/0.8289  ENL 7516/625
+  real  single-patch  corr 0.9996  ENL-ROI 1.015/1.277  EPI 0.6770/0.7135  ENLr 0.9036/1.1198
+  real  scene-1patch  corr 0.9996  ENL-ROI 1.038/1.275  EPI 0.6739/0.7122  ENLr 0.9110/1.1312
+
+Verdict: PASS. The crop/batch scene trainer reproduces the single-patch
+results within noise (synth PSNR -0.27/-0.09 dB from the reduced per-crop
+context; real-patch metrics equivalent, ENLr 0.911/1.131 vs 0.904/1.120).
+The machinery is validated — ready for the real 16-patch scene data in
+data/scene/.

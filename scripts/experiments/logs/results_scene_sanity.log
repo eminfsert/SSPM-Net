@@ -1,0 +1,33 @@
+
+=== scene-sanity synth (1 patch, crop batch) ===
+  [pre-warmup] 50 steps, final loss=0.02750
+  [scene-train] 1 patches, crop=256 batch=4 iters=700 merlin=True pha=True model_cfg={'dropout_style': 'pixel', 'norm': 'group'}
+  step    1/700 loss=0.9538
+  step  100/700 loss=0.8266
+  step  200/700 loss=0.8082
+  step  300/700 loss=0.7766
+  step  400/700 loss=0.7319
+  step  500/700 loss=0.7225
+  step  600/700 loss=0.7278
+  step  700/700 loss=0.7435
+  [final] EMA weights, 1 patches denoised + D4xMC-dropout TTA
+
+=== scene-sanity real (1 patch, crop batch) ===
+  [pre-warmup] 50 steps, final loss=0.03133
+  [scene-train] 1 patches, crop=256 batch=4 iters=700 merlin=True pha=True model_cfg={'dropout_style': 'pixel', 'norm': 'group'}
+  step    1/700 loss=1.0852
+  step  100/700 loss=0.9437
+  step  200/700 loss=0.8985
+  step  300/700 loss=0.8349
+  step  400/700 loss=0.7698
+  step  500/700 loss=0.7511
+  step  600/700 loss=0.7543
+  step  700/700 loss=0.7677
+  [final] EMA weights, 1 patches denoised + D4xMC-dropout TTA
+
+Scene-trainer degenerate sanity (1 patch, batch=4x256 crops) vs single-patch trainer, both pixel+group full stack:
+
+  synth single-patch  PSNR 24.484/22.941  SSIM 0.8340/0.8382  EPI 0.8400/0.8278  ENL 4630/561
+  synth scene-1patch  PSNR 24.212/22.855  SSIM 0.8247/0.8357  EPI 0.8328/0.8289  ENL 7516/625
+  real  single-patch  corr 0.9996  ENL-ROI 1.015/1.277  EPI 0.6770/0.7135  ENLr 0.9036/1.1198
+  real  scene-1patch  corr 0.9996  ENL-ROI 1.038/1.275  EPI 0.6739/0.7122  ENLr 0.9110/1.1312

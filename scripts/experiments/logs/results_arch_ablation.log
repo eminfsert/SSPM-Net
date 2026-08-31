@@ -12,3 +12,16 @@
 sigma_n=11.167  sim coherence=0.653 (target 0.655)
 
 === synth final ===
+  [pre-warmup] 50 steps, final loss=0.12612
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.6248
+  step  100/700 loss=0.9497
+  step  200/700 loss=0.8370
+  step  300/700 loss=0.7591
+  step  400/700 loss=0.7164
+  step  500/700 loss=0.6910
+  step  600/700 loss=0.6805
+  step  700/700 loss=0.6761
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== real final ===

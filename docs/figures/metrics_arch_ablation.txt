@@ -1,0 +1,40 @@
+Synthetic-GT (vs known clean; scale-matched)
+  Method         PSNR(HH)   PSNR(HV)   SSIM(HH)   SSIM(HV)    EPI(HH)    EPI(HV)    ENL(HH)    ENL(HV)
+  final           23.8490    21.4355     0.7959     0.8011     0.8330     0.7907   134.9274   192.1744
+  pixel           24.5509    17.8497     0.8274     0.6882     0.8526     0.7826   612.5278    13.8381
+  group           23.8620    22.1399     0.8108     0.7986     0.8159     0.7716   170.8828    85.3317
+  pixel+group     24.4842    22.9406     0.8340     0.8382     0.8400     0.8278  4629.5763   560.6299
+
+Real patch (noisy-reference; ratio-ENL ideal ~= 1)
+  Method       corr(HV,VH) ENL-ROI(HH) ENL-ROI(HV)     EPI(HH)     EPI(HV)    ENLr(HH)    ENLr(HV)
+  final             0.9924      1.2032      1.4961      0.6929      0.6562      0.8786      0.4990
+  pixel             0.9920      1.0699      1.1943      0.6851      0.6130      0.8949      0.1203
+  group             0.9943      1.2713      1.6425      0.6753      0.6412      0.8826      0.7362
+  pixel+group       0.9996      1.0148      1.2771      0.6770      0.7135      0.9036      1.1198
+
+Context: A1 (dropout_style) x A2 (norm) ablation on top of the full
+recommended stack (MERLIN + PH(b3,f0.5) + whiteness + polish(0.5) +
+edge_boost(1.0)), 700 iters. "final" = historical architecture
+(Dropout2d "band" + BatchNorm). Motivations (measured): Dropout2d on the
+1-channel LL output zeroes the ENTIRE low-frequency band in ~30% of
+passes (training AND the 32-64 MC-dropout inference passes); BatchNorm
+runs on batch-1 statistics in train() mode and the EMA model never
+updates its BN buffers.
+
+Verdict: pixel+group is the new winning base — the first change that
+clears the "serious gain" bar:
+ * GT: PSNR +0.64 dB (HH) / +1.51 dB (HV), SSIM 0.796/0.801 ->
+   0.834/0.838, EPI(HV) 0.791 -> 0.828, ENL-ROI 135/192 -> 4630/561.
+   PSNR, SSIM and EPI all rise together, so the ENL jump is genuine
+   smoothing of homogeneous areas, not blur (visual check: structures and
+   edges intact, HV keeps MORE detail than "final").
+ * Real: corr(HV,VH) 0.9924 -> 0.9996, ratio-ENL(HV) 0.499 -> 1.120
+   (ideal 1), ENLr(HH) 0.879 -> 0.904, EPI(HV) 0.656 -> 0.714.
+   ENL-ROI on the textured urban ROIs is lower (1.20/1.50 -> 1.01/1.28) —
+   the texture-saturated ROI metric disagrees with the ratio metric here;
+   the ratio-image says the removed component is now much closer to pure
+   speckle.
+ * Interactions matter: "pixel" ALONE collapses the cross-pol channel on
+   GT (PSNR(HV) 21.4 -> 17.8, ENL(HV) 14) — per-pixel dropout with
+   batch-1 BatchNorm is unstable; "group" alone is a modest, consistent
+   improvement. Only the combination unlocks the gain. Document both.

@@ -25,3 +25,108 @@ sigma_n=11.167  sim coherence=0.653 (target 0.655)
   [final] EMA weights @ step 700 + D4xMC-dropout TTA
 
 === real final ===
+  [pre-warmup] 50 steps, final loss=0.16884
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.8499
+  step  100/700 loss=1.1172
+  step  200/700 loss=0.9333
+  step  300/700 loss=0.8229
+  step  400/700 loss=0.7663
+  step  500/700 loss=0.7365
+  step  600/700 loss=0.7267
+  step  700/700 loss=0.7200
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synth pixel ===
+  [pre-warmup] 50 steps, final loss=0.06995
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.1985
+  step  100/700 loss=0.9039
+  step  200/700 loss=0.7951
+  step  300/700 loss=0.7113
+  step  400/700 loss=0.6616
+  step  500/700 loss=0.6363
+  step  600/700 loss=0.6265
+  step  700/700 loss=0.6250
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== real pixel ===
+  [pre-warmup] 50 steps, final loss=0.10566
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.4762
+  step  100/700 loss=1.0573
+  step  200/700 loss=0.8939
+  step  300/700 loss=0.7320
+  step  400/700 loss=0.6719
+  step  500/700 loss=0.6439
+  step  600/700 loss=0.6327
+  step  700/700 loss=0.6297
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synth group ===
+  [pre-warmup] 50 steps, final loss=0.03909
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.0553
+  step  100/700 loss=0.8770
+  step  200/700 loss=0.7949
+  step  300/700 loss=0.7137
+  step  400/700 loss=0.6559
+  step  500/700 loss=0.6288
+  step  600/700 loss=0.6273
+  step  700/700 loss=0.6225
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== real group ===
+  [pre-warmup] 50 steps, final loss=0.04131
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.1545
+  step  100/700 loss=0.9991
+  step  200/700 loss=0.8439
+  step  300/700 loss=0.7350
+  step  400/700 loss=0.6744
+  step  500/700 loss=0.6493
+  step  600/700 loss=0.6481
+  step  700/700 loss=0.6372
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synth pixel+group ===
+  [pre-warmup] 50 steps, final loss=0.02859
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=0.9665
+  step  100/700 loss=0.8440
+  step  200/700 loss=0.7691
+  step  300/700 loss=0.6835
+  step  400/700 loss=0.6344
+  step  500/700 loss=0.6096
+  step  600/700 loss=0.6003
+  step  700/700 loss=0.5987
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== real pixel+group ===
+  [pre-warmup] 50 steps, final loss=0.03211
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.1033
+  step  100/700 loss=0.9609
+  step  200/700 loss=0.8160
+  step  300/700 loss=0.7044
+  step  400/700 loss=0.6490
+  step  500/700 loss=0.6229
+  step  600/700 loss=0.6126
+  step  700/700 loss=0.6099
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+Synthetic-GT (vs known clean; scale-matched)
+  Method         PSNR(HH)   PSNR(HV)   SSIM(HH)   SSIM(HV)    EPI(HH)    EPI(HV)    ENL(HH)    ENL(HV)
+  final           23.8490    21.4355     0.7959     0.8011     0.8330     0.7907   134.9274   192.1744
+  pixel           24.5509    17.8497     0.8274     0.6882     0.8526     0.7826   612.5278    13.8381
+  group           23.8620    22.1399     0.8108     0.7986     0.8159     0.7716   170.8828    85.3317
+  pixel+group     24.4842    22.9406     0.8340     0.8382     0.8400     0.8278  4629.5763   560.6299
+
+Real patch (noisy-reference; ratio-ENL ideal ~= 1)
+  Method       corr(HV,VH) ENL-ROI(HH) ENL-ROI(HV)     EPI(HH)     EPI(HV)    ENLr(HH)    ENLr(HV)
+  final             0.9924      1.2032      1.4961      0.6929      0.6562      0.8786      0.4990
+  pixel             0.9920      1.0699      1.1943      0.6851      0.6130      0.8949      0.1203
+  group             0.9943      1.2713      1.6425      0.6753      0.6412      0.8826      0.7362
+  pixel+group       0.9996      1.0148      1.2771      0.6770      0.7135      0.9036      1.1198
+
+Saved results/ri_compare/compare_arch_ablation.png

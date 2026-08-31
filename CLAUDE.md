@@ -147,6 +147,19 @@ architecture overrides. Experiments: `scripts/experiments/
 run_arch_ablation.py`, `run_a4_sat.py`. Success bar: GT PSNR >= +0.5 dB or
 ENL-ROI >= +50% at equal EPI.
 
+- A1/A2 RESULT (2026-08-31): **pixel+group is the new winning base** and
+  the first change clearing the serious-gain bar. GT: PSNR +0.64/+1.51 dB
+  (HH/HV), SSIM 0.796/0.801->0.834/0.838, EPI(HV) 0.791->0.828, ENL-ROI
+  135/192->4630/561 (PSNR+SSIM+EPI rise together => genuine, not blur;
+  visual check clean). Real: corr(HV,VH) 0.9924->0.9996, ENLr(HV)
+  0.499->1.120 (ideal 1), EPI(HV) 0.656->0.714; urban ENL-ROI lower
+  (1.20/1.50->1.01/1.28) — ROI metric disagrees with the ratio metric,
+  report both. CAUTION: "pixel" dropout ALONE collapses cross-pol on GT
+  (PSNR(HV) 17.8) — per-pixel dropout with batch-1 BatchNorm is unstable;
+  only the combination works. Tables/figure in docs/figures/
+  metrics_arch_ablation.txt. Subsequent ablations run on the pixel+group
+  base (defaults in Config still historical until more validation).
+
 **Open items:** flat/rural patch test (the natural place where
 `phase_surface_boost` could still help — an urban patch has little surface
 scattering); a dedicated `tv_mult` sweep (ratio-ENL and ENL-ROI disagree

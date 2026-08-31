@@ -1,0 +1,33 @@
+Synthetic-GT with uint8 clipping
+  Method           PSNR(HH)   PSNR(HV)   SSIM(HH)    EPI(HH)    EPI(HV)    ENL(HH)    ENL(HV) RMSEbright
+  noclip-final      23.8490    21.4355     0.7959     0.8330     0.7907   134.9274   192.1744    29.7300
+  clip-final        22.1647    19.9500     0.7593     0.7663     0.7205   208.5302   109.9908    56.5055
+  clip-sat          20.6100    19.8120     0.7132     0.7141     0.6748   150.5847   147.9861    74.5958
+  clip-satfull      21.2072    20.4886     0.7058     0.7157     0.6949   138.7909    49.4989    58.8601
+
+Real patch
+  Method         corr(HV,VH) ENL-ROI(HH) ENL-ROI(HV)     EPI(HH)     EPI(HV)    ENLr(HH)    ENLr(HV)
+  final               0.9924      1.2032      1.4961      0.6929      0.6562      0.8786      0.4990
+  sat                 0.9886      1.7979      2.4068      0.6749      0.5827      0.8705      0.7640
+  npy+sat             0.9732      0.7563      1.6052      0.5810      0.3130      0.1095      0.1012
+
+Verdict (A4): NEGATIVE — both countermeasures stay off.
+ * The clipping COST is real and now measured: matched uint8 clipping
+   loses -1.7 dB PSNR(HH) / -1.5 dB PSNR(HV) vs the unclipped substrate
+   (noclip-final vs clip-final). The 8-bit source data genuinely limits
+   the pipeline.
+ * But MASKING the saturated pixels out of the data term makes it WORSE
+   (clip-sat: -1.6 dB below clip-final on HH; RMSE on the bright top-1%
+   rises 56.5 -> 74.6): a clipped target is a biased-but-informative
+   lower bound, while NO target lets the regularizers pull bright
+   structures down. Real patch confirms: ENL-ROI jumps (1.20 -> 1.80)
+   exactly because bright pixels get flattened; EPI(HV) drops
+   0.656 -> 0.583.
+ * npy+sat (full-range float amplitude) is broken outright (ENLr 0.11,
+   EPI(HV) 0.31): the 99th-percentile normalization + clip(0,5) cannot
+   accommodate the heavy bright tail (max 16935 vs uint8-clip ~274) —
+   the amplitude-domain pipeline needs the compressed dynamic range.
+ * Right future fix (not implemented): treat saturated pixels as CENSORED
+   observations (target >= clip value, one-sided loss) instead of
+   excluding them; and/or log-domain training to absorb the dynamic
+   range. Recorded as an open item.

@@ -160,6 +160,17 @@ ENL-ROI >= +50% at equal EPI.
   metrics_arch_ablation.txt. Subsequent ablations run on the pixel+group
   base (defaults in Config still historical until more validation).
 
+- A4 RESULT (2026-08-31): NEGATIVE — sat-masking stays off. Matched uint8
+  clipping in the GT protocol costs a real -1.7/-1.5 dB (the 8-bit data
+  limits the pipeline), but EXCLUDING saturated pixels from the data term
+  makes it worse (-1.6 dB more; bright top-1% RMSE 56.5->74.6): a clipped
+  target is a biased-but-informative lower bound, no target lets the
+  regularizers flatten bright structures (real ENL-ROI jump 1.20->1.80 is
+  exactly that flattening, EPI(HV) 0.656->0.583). Full-range .npy
+  amplitude breaks the q99/clip(0,5) normalization outright (documented).
+  Future fix idea: censored one-sided loss (target >= clip) or log-domain
+  training. Table: docs/figures/metrics_a4_sat.txt.
+
 **Open items:** flat/rural patch test (the natural place where
 `phase_surface_boost` could still help — an urban patch has little surface
 scattering); a dedicated `tv_mult` sweep (ratio-ENL and ENL-ROI disagree

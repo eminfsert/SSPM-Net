@@ -2,3 +2,81 @@ real sat fractions amp/re/im: ['0.066', '0.067', '0.067', '0.068'] ['0.064', '0.
 [cached] arch_synth_final.npy
 
 === synth clip-final ===
+  [pre-warmup] 50 steps, final loss=0.22789
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=2.0601
+  step  100/700 loss=1.2116
+  step  200/700 loss=0.9843
+  step  300/700 loss=0.8641
+  step  400/700 loss=0.7978
+  step  500/700 loss=0.7746
+  step  600/700 loss=0.7650
+  step  700/700 loss=0.7566
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synth clip-sat ===
+  [pre-warmup] 50 steps, final loss=0.23415
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.9784
+  step  100/700 loss=1.1227
+  step  200/700 loss=0.8964
+  step  300/700 loss=0.7726
+  step  400/700 loss=0.7111
+  step  500/700 loss=0.6894
+  step  600/700 loss=0.6788
+  step  700/700 loss=0.6724
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== synth clip-satfull ===
+  [pre-warmup] 50 steps, final loss=0.14800
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.7630
+  step  100/700 loss=0.8567
+  step  200/700 loss=0.7582
+  step  300/700 loss=0.6816
+  step  400/700 loss=0.6365
+  step  500/700 loss=0.6115
+  step  600/700 loss=0.6020
+  step  700/700 loss=0.5963
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== real sat ===
+  [pre-warmup] 50 steps, final loss=0.17475
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.8169
+  step  100/700 loss=1.0364
+  step  200/700 loss=0.8702
+  step  300/700 loss=0.7561
+  step  400/700 loss=0.7051
+  step  500/700 loss=0.6790
+  step  600/700 loss=0.6659
+  step  700/700 loss=0.6605
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+=== real npy+sat ===
+  [pre-warmup] 50 steps, final loss=0.10709
+  [train] iters=700 lr=0.0001 tv_mult=10.0 speckle_factor=True hist=1.0 nl=0.5 ema=True tta=True RI(mode=merlin,w=0.6,guide_tv=True,guide_nlm=True) PH(b=3.0,s=0.0,p=0.0,f=0.5) EDGE(l=0.0,boost=1.0,pw=0.3) RF(selfref=0,lam_end=0.0,white=0.05,polish=0.5)
+  step    1/700 loss=1.6071
+  step  100/700 loss=0.7635
+  step  200/700 loss=0.6930
+  step  300/700 loss=0.6660
+  step  400/700 loss=0.6445
+  step  500/700 loss=0.6311
+  step  600/700 loss=0.6332
+  step  700/700 loss=0.6273
+  [final] EMA weights @ step 700 + D4xMC-dropout TTA
+
+Synthetic-GT with uint8 clipping (vs known clean; scale-matched)
+  Method           PSNR(HH)   PSNR(HV)   SSIM(HH)    EPI(HH)    EPI(HV)    ENL(HH)    ENL(HV) RMSEbright
+  noclip-final      23.8490    21.4355     0.7959     0.8330     0.7907   134.9274   192.1744    29.7300
+  clip-final        22.1647    19.9500     0.7593     0.7663     0.7205   208.5302   109.9908    56.5055
+  clip-sat          20.6100    19.8120     0.7132     0.7141     0.6748   150.5847   147.9861    74.5958
+  clip-satfull      21.2072    20.4886     0.7058     0.7157     0.6949   138.7909    49.4989    58.8601
+
+Real patch (each vs its own noisy reference)
+  Method         corr(HV,VH) ENL-ROI(HH) ENL-ROI(HV)     EPI(HH)     EPI(HV)    ENLr(HH)    ENLr(HV)
+  final               0.9924      1.2032      1.4961      0.6929      0.6562      0.8786      0.4990
+  sat                 0.9886      1.7979      2.4068      0.6749      0.5827      0.8705      0.7640
+  npy+sat             0.9732      0.7563      1.6052      0.5810      0.3130      0.1095      0.1012
+
+Wrote results/ri_compare/metrics_a4_sat.txt

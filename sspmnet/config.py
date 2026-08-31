@@ -46,6 +46,15 @@ class Config:
 
     # ── Monte-Carlo dropout (Self2Self) ──────────────────────────────
     dropout_rate: float = 0.3
+    # "band": historical nn.Dropout2d — on the 1-channel LL output this
+    # zeroes the WHOLE low-frequency band with prob p; "pixel": nn.Dropout
+    # (i.i.d. per element). See sspmnet.layers.
+    dropout_style: str = "band"
+
+    # ── Normalization layers ─────────────────────────────────────────
+    # "batch": historical BatchNorm2d (batch-1 statistics; EMA never
+    # updates the running buffers); "group": GroupNorm(min(8,C), C).
+    norm: str = "batch"
 
     # ── Device ───────────────────────────────────────────────────────
     device: str = "auto"

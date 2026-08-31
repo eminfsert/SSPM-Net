@@ -180,6 +180,10 @@ class TrainConfig:
     tta_mc_passes: int = 4
     n_inference: int = 32           # used when use_tta is False
 
+    # Model architecture overrides: kwargs forwarded to sspmnet.Config
+    # (e.g. {"dropout_style": "pixel", "norm": "group"}); None = defaults
+    model_cfg: dict = None
+
     # Reporting
     snapshot_every: int = 100
 
@@ -337,7 +341,7 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             ef[:, :, :, :-1] = torch.maximum(ef[:, :, :, :-1], edge_w[1])
             edge_full = ef
 
-    model = SSPMNet(Config()).to(device)
+    model = SSPMNet(Config(**(cfg.model_cfg or {}))).to(device)
     masker = QuadPolSpatialMasker(keep_prob=cfg.mask_keep_prob).to(device)
     crit = MaskedL1Loss()
     n_iters = cfg.iters

@@ -26,6 +26,7 @@ from .high_freq_branch import HighFreqBranch
 from .reconstruction import ReconstructionLayer
 from .cross_attention import CrossPolarizationAttention
 from .freq_decomposition import FrequencyDecomposition
+from .layers import make_norm, make_dropout
 
 
 class DenoiseBranch(nn.Module):
@@ -53,7 +54,7 @@ class DenoiseBranch(nn.Module):
             attn_drop_rate=cfg.high_freq_attn_drop_rate,
             out_channels=1,
         )
-        self.drop_ll = nn.Dropout2d(p=drop_p)
+        self.drop_ll = make_dropout(drop_p, cfg.dropout_style)
 
         # CNN processes the detail sub-bands (3 channels: LH, HL, HH)
         self.hf_branch = LowFreqBranch(
@@ -62,15 +63,18 @@ class DenoiseBranch(nn.Module):
             num_blocks=cfg.low_freq_num_blocks,
             out_channels=3,
             dropout=drop_p,
+            dropout_style=cfg.dropout_style,
+            norm=cfg.norm,
         )
-        self.drop_hf = nn.Dropout2d(p=drop_p)
+        self.drop_hf = make_dropout(drop_p, cfg.dropout_style)
 
         self.reconstruction = ReconstructionLayer(
             in_channels=1,
             mid_channels=cfg.recon_channels,
             out_channels=feat_out,
+            norm=cfg.norm,
         )
-        self.drop_recon = nn.Dropout2d(p=drop_p)
+        self.drop_recon = make_dropout(drop_p, cfg.dropout_style)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """x: (B, 1, H, W) -> feature map (B, D, H, W)."""
@@ -88,15 +92,16 @@ class DenoiseBranch(nn.Module):
 class ChannelRefinement(nn.Module):
     """Per-channel refinement: feature map -> 1-channel output."""
 
-    def __init__(self, feat_dim: int = 64, dropout: float = 0.3):
+    def __init__(self, feat_dim: int = 64, dropout: float = 0.3,
+                 dropout_style: str = "band", norm: str = "batch"):
         super().__init__()
         self.refine = nn.Sequential(
             nn.Conv2d(feat_dim, feat_dim, 3, padding=1, bias=False),
-            nn.BatchNorm2d(feat_dim),
+            make_norm(feat_dim, norm),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Dropout2d(p=dropout),
+            make_dropout(dropout, dropout_style),
             nn.Conv2d(feat_dim, feat_dim // 2, 3, padding=1, bias=False),
-            nn.BatchNorm2d(feat_dim // 2),
+            make_norm(feat_dim // 2, norm),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(feat_dim // 2, 1, 1, bias=True),
         )
@@ -131,7 +136,8 @@ class SSPMNet(nn.Module):
         )
 
         self.refinements = nn.ModuleList([
-            ChannelRefinement(feat_dim=D, dropout=cfg.dropout_rate)
+            ChannelRefinement(feat_dim=D, dropout=cfg.dropout_rate,
+                              dropout_style=cfg.dropout_style, norm=cfg.norm)
             for _ in range(4)
         ])
 

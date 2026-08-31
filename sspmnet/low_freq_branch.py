@@ -8,17 +8,19 @@ edges and speckle live. It is a lightweight residual CNN.
 import torch
 import torch.nn as nn
 
+from .layers import make_norm, make_dropout
+
 
 class ResidualBlock(nn.Module):
-    """Pre-activation residual block: (BN -> LReLU -> Conv) x2 + skip."""
+    """Pre-activation residual block: (Norm -> LReLU -> Conv) x2 + skip."""
 
-    def __init__(self, channels: int):
+    def __init__(self, channels: int, norm: str = "batch"):
         super().__init__()
         self.block = nn.Sequential(
-            nn.BatchNorm2d(channels),
+            make_norm(channels, norm),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(channels, channels, 3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
+            make_norm(channels, norm),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(channels, channels, 3, padding=1, bias=False),
         )
@@ -40,6 +42,8 @@ class LowFreqBranch(nn.Module):
         num_blocks: int = 5,
         out_channels: int = None,
         dropout: float = 0.3,
+        dropout_style: str = "band",
+        norm: str = "batch",
     ):
         super().__init__()
         if out_channels is None:
@@ -49,13 +53,13 @@ class LowFreqBranch(nn.Module):
 
         layers = []
         for i in range(num_blocks):
-            layers.append(ResidualBlock(mid_channels))
+            layers.append(ResidualBlock(mid_channels, norm=norm))
             if (i + 1) % 2 == 0:                 # dropout every 2 blocks
-                layers.append(nn.Dropout2d(p=dropout))
+                layers.append(make_dropout(dropout, dropout_style))
         self.blocks = nn.Sequential(*layers)
 
         self.proj_out = nn.Sequential(
-            nn.BatchNorm2d(mid_channels),
+            make_norm(mid_channels, norm),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(mid_channels, out_channels, 3, padding=1, bias=False),
         )

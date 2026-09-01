@@ -51,3 +51,25 @@ VM, within-table comparison fair):
   0.5); phase_fidelity 0.75 slightly worse (stays 0.5).
 - Visual (compare_hv_winner.png): sharper building rows and stadium ring,
   deeper/cleaner dark water (noise-floor glow removed), no over-smoothing.
+
+REVISION (2026-09-01, user visual check — CONFIRMED): the "winner" leaves
+MORE residual grain in flat regions than the base. Measured on an 11.6k-px
+homogeneous water mask (HV, high-pass std = grain amplitude):
+  base 0.825 | pairin 0.877 (+6%) | polgroup 0.903 (+9%) |
+  pair+group 1.102 (+34%, superadditive) | +debias0.5 1.219 (+48%)
+and the debias lowers the dark mean ~20%, so the VISIBLE grain contrast
+(CV) nearly doubles (0.068 -> 0.124). Figure: compare_hv_water_grain.png.
+Why the metrics missed it: noisy-reference EPI rewards retained grain
+(similarity to speckle gradients), and ENLr(HV)->1.00 was reached partly
+by ADDING uncorrelated fluctuation, not only by removing bias. The GT
+gains (PSNR/SSIM) are real but modest pre-debias (+0.19 dB).
+REVISED recommendation:
+  - pairin (xpol_pair_input) KEEPS: all GT metrics up, flat-water CV
+    0.063 vs base 0.068 (no grain penalty before debias).
+  - polgroup: NOT default — its real-EPI gain comes bundled with the
+    flat-area grain (2-channel NLM/polish distance is a noisier
+    similarity estimate -> weaker flat smoothing). Needs a refinement
+    (e.g. group distance for TV only) before adoption.
+  - thermal_debias: radiometrically correct but visually amplifies floor
+    grain contrast; use t=0.25-0.5 only when radiometric accuracy is the
+    goal, off for visual deliverables.

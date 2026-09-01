@@ -1,0 +1,10 @@
+[cached] denoised_baseline.npy
+sigma_n=13.145  sim coherence=0.654 (target 0.655)
+
+=== synth base ===
+[cached] tvsweep_synth_tv10.npy
+
+=== real base ===
+[cached] tvsweep_real_tv10.npy
+
+=== synth pairin ===

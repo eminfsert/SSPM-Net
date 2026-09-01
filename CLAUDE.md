@@ -187,7 +187,17 @@ ENL-ROI >= +50% at equal EPI.
   high tv. `tv_mult=10` stays the default (mid-plateau); tv5 is the
   max-accuracy point. Table: docs/figures/metrics_tvmult_sweep.txt.
 
-- Track C — cross-pol deep work RESULT (2026-09-01): the HV bar is MET.
+- Track C REVISED (2026-09-01, after the user's visual check): the
+  original "winner" claim was overstated — pair+group+debias leaves
+  MORE flat-area grain than base (water high-pass std +48%, visible
+  CV ~2x; noisy-EPI and ENLr rewarded the grain). What survives:
+  `xpol_pair_input=True` alone (all GT metrics up, NO flat grain
+  penalty: water CV 0.063 vs base 0.068) — the real Track C win.
+  `polgroup_guides` and `thermal_debias` stay off by default (see
+  docs/figures/metrics_hv_track.txt REVISION for the full story and
+  the untested polgroup fix idea). Lesson: add flat-region high-pass
+  std to every ablation table.
+  Original result for reference: the HV bar was declared MET.
   Winner: `xpol_pair_input=True` (model_cfg) + `polgroup_guides=True` +
   `thermal_debias=0.5`. C1 (xpol branch sees both reciprocal planes,
   +0.12% params) gives a real HV gain (GT PSNR(HV) +0.13 dB, EPI(HV)

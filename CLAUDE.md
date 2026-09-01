@@ -187,6 +187,20 @@ ENL-ROI >= +50% at equal EPI.
   high tv. `tv_mult=10` stays the default (mid-plateau); tv5 is the
   max-accuracy point. Table: docs/figures/metrics_tvmult_sweep.txt.
 
+- Track C — cross-pol deep work RESULT (2026-09-01): the HV bar is MET.
+  Winner: `xpol_pair_input=True` (model_cfg) + `polgroup_guides=True` +
+  `thermal_debias=0.5`. C1 (xpol branch sees both reciprocal planes,
+  +0.12% params) gives a real HV gain (GT PSNR(HV) +0.13 dB, EPI(HV)
+  0.834->0.841, real ENLr(HV) 1.12->1.05); C2 (regularizer guidance split
+  by pol group) pays on the real patch (EPI(HV) 0.714->0.757, EPI(HH)
+  0.677->0.701); C3 (thermal-floor debias, sigma_th auto-estimated from
+  the HV-VH difference) fixes the dark areas: dark-bin relative RMSE
+  -15% and real ENLr(HV) lands exactly on the ideal 1.00 at t=0.5
+  (t=1.0 helps GT more but overshoots the real ratio metric). Cumulative
+  GT PSNR(HV) +0.27..+0.34 dB. Negatives: merlin_recip_weight 0.25/0.75
+  flat, phase_fidelity 0.75 slightly worse. Tables/figures:
+  docs/figures/metrics_hv_track.txt, compare_hv_winner.png.
+
 **Open items:** flat/rural patch test (the natural place where
 `phase_surface_boost` could still help — an urban patch has little surface
 scattering); obtain signed float SLC; decide on merging the feature

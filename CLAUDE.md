@@ -211,6 +211,19 @@ ENL-ROI >= +50% at equal EPI.
   flat, phase_fidelity 0.75 slightly worse. Tables/figures:
   docs/figures/metrics_hv_track.txt, compare_hv_winner.png.
 
+- NEXT (planned, NOT yet executed — resume point): Track D "feed the
+  cross-pol channel with phase" — full plan in
+  `docs/plans/track-d-hv-phase-plan.md`. Grounding diagnostics
+  (2026-09-01, keep): phase files are pixel-level INCONSISTENT with
+  the |Re|/|Im| files (quadrant-phase corr ~0.02) so coherent HV+VH
+  fusion is impossible — phase is usable only as spatial maps; the
+  new `helix` map coh(e^{2i(phi_HH-phi_HV)}) fires on man-made
+  structure (0.337 bright vs 0.129 random null); measured on
+  synthetic: AVERAGING the two xpol targets cuts supervision RMSE
+  -26% (mixing the L1 losses — current w_r — gains nothing), and
+  target-domain thermal debias removes the dark bias (+4.5 -> +0.6)
+  without the post-hoc grain amplification.
+
 **Open items:** flat/rural patch test (the natural place where
 `phase_surface_boost` could still help — an urban patch has little surface
 scattering); obtain signed float SLC; decide on merging the feature

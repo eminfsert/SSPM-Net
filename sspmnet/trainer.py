@@ -184,6 +184,22 @@ class TrainConfig:
     # (e.g. {"dropout_style": "pixel", "norm": "group"}); None = defaults
     model_cfg: dict = None
 
+    # Cross-pol (HV/VH) specific treatment — see docs/figures/metrics_hv_*
+    polgroup_guides: bool = False   # split the regularizer guidance by
+                                    # polarization group: TV edge weights
+                                    # from a co-pol and a cross-pol guide
+                                    # separately (instead of one 4-channel
+                                    # span), NLM/polish neighbor similarity
+                                    # from each group's own channels, and
+                                    # per-channel whiteness normalization —
+                                    # the dark cross-pol channels stop
+                                    # inheriting co-pol structure decisions
+    thermal_debias: float = 0.0     # subtract t*sigma_th^2 from the OUTPUT
+                                    # intensity of the cross-pol channels
+                                    # (sigma_th estimated from the HV-VH
+                                    # difference on dark low-coherence
+                                    # pixels); 0 = off
+
     # Reporting
     snapshot_every: int = 100
 
@@ -271,11 +287,25 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         ai_t = ri_t[1:2]
         with torch.no_grad():
             if cfg.guide_tv:
-                # ~8-look span guide (2 RI looks x 4 channels)
-                guide = (ri_t ** 2).mean(dim=(0, 1)).sqrt()[None, None]
-                tv_weights = guide_edge_weights(
-                    guide, alpha=cfg.guide_alpha,
-                    cv_protect=cfg.guide_cv_protect or None)
+                if cfg.polgroup_guides:
+                    # separate ~4-look guides per polarization group, so
+                    # cross-pol TV protection follows cross-pol structure
+                    # (a single span is dominated by the co-pol channels)
+                    g_co = (ri_t[:, [0, 3]] ** 2).mean(dim=(0, 1)).sqrt()[None, None]
+                    g_x = (ri_t[:, [1, 2]] ** 2).mean(dim=(0, 1)).sqrt()[None, None]
+                    w_co = guide_edge_weights(g_co, alpha=cfg.guide_alpha,
+                                              cv_protect=cfg.guide_cv_protect or None)
+                    w_x = guide_edge_weights(g_x, alpha=cfg.guide_alpha,
+                                             cv_protect=cfg.guide_cv_protect or None)
+                    tv_weights = tuple(
+                        torch.cat([c, x, x, c], dim=1)
+                        for c, x in zip(w_co, w_x))       # (1,4,...) maps
+                else:
+                    # ~8-look span guide (2 RI looks x 4 channels)
+                    guide = (ri_t ** 2).mean(dim=(0, 1)).sqrt()[None, None]
+                    tv_weights = guide_edge_weights(
+                        guide, alpha=cfg.guide_alpha,
+                        cv_protect=cfg.guide_cv_protect or None)
             if cfg.guide_nlm:
                 # per-channel 2-look reference, lightly smoothed
                 nl_ref = _box_blur(0.5 * (ar_t + ai_t), k=3, passes=1)
@@ -306,10 +336,20 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         if tv_weights is None:
             # no multi-look guide available: build edge weights from the
             # (1-look) span so the phase factor has something to modulate
-            span_g = (noisy_t ** 2).mean(dim=1, keepdim=True).sqrt()
-            tv_weights = guide_edge_weights(
-                span_g, alpha=cfg.guide_alpha,
-                cv_protect=cfg.guide_cv_protect or None)
+            if cfg.polgroup_guides:
+                g_co = (noisy_t[:, [0, 3]] ** 2).mean(dim=1, keepdim=True).sqrt()
+                g_x = (noisy_t[:, [1, 2]] ** 2).mean(dim=1, keepdim=True).sqrt()
+                w_co = guide_edge_weights(g_co, alpha=cfg.guide_alpha,
+                                          cv_protect=cfg.guide_cv_protect or None)
+                w_x = guide_edge_weights(g_x, alpha=cfg.guide_alpha,
+                                         cv_protect=cfg.guide_cv_protect or None)
+                tv_weights = tuple(torch.cat([c, x, x, c], dim=1)
+                                   for c, x in zip(w_co, w_x))
+            else:
+                span_g = (noisy_t ** 2).mean(dim=1, keepdim=True).sqrt()
+                tv_weights = guide_edge_weights(
+                    span_g, alpha=cfg.guide_alpha,
+                    cv_protect=cfg.guide_cv_protect or None)
         tv_weights = modulate_edge_weights(tv_weights, phase_factor)
 
     nl_ref0 = nl_ref            # initial (static) non-local reference
@@ -538,11 +578,14 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         if cfg.nlm_lambda_end > 0 and n_iters > 1:
             nlm_lam = (cfg.nlm_lambda + (cfg.nlm_lambda_end - cfg.nlm_lambda)
                        * step / (n_iters - 1))
+        _dg = [[0, 3], [1, 2]] if cfg.polgroup_guides else None
         l_nl = (polarimetric_nl_loss(d, nl_ref if nl_ref is not None else noisy_t,
                                      cfg.nlm_window, cfg.nlm_sigma,
-                                     pixel_weight=nl_w, sigma_map=nl_sigma_map)
+                                     pixel_weight=nl_w, sigma_map=nl_sigma_map,
+                                     dist_groups=_dg)
                 if cfg.nlm_lambda > 0 else torch.tensor(0.0, device=device))
-        l_white = (ratio_whiteness_loss(d, noisy_t, lags=cfg.whiteness_lags)
+        l_white = (ratio_whiteness_loss(d, noisy_t, lags=cfg.whiteness_lags,
+                                        per_channel=cfg.polgroup_guides)
                    if cfg.whiteness_lambda > 0
                    else torch.tensor(0.0, device=device))
         l_edge = (edge_fidelity_loss(d, guide_log, edge_w)
@@ -678,7 +721,10 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 prot = torch.maximum(prot, edge_full)
             acc = nl_polish(acc, window=cfg.polish_window,
                             sigma=cfg.polish_sigma, strength=cfg.polish,
-                            protect=prot).clamp(0, 1)
+                            protect=prot,
+                            dist_groups=([[0, 3], [1, 2]]
+                                         if cfg.polgroup_guides else None)
+                            ).clamp(0, 1)
 
     # ── Edge-masked unsharp: restore edge steepness on the final output ──
     if cfg.edge_boost > 0 and edge_full is not None:
@@ -696,6 +742,21 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
               + (" + D4xMC-dropout TTA" if cfg.use_tta else ""))
 
     denoised = acc[0].cpu().numpy() * q99.squeeze()[:, None, None]
+
+    # ── Cross-pol thermal-floor debias: E[|z|^2] = I + P_thermal, so the
+    #    additive thermal power biases the dark cross-pol output upward;
+    #    subtract it in the intensity domain (sigma_th measured from the
+    #    HV-VH difference on dark low-coherence pixels). ──
+    if cfg.thermal_debias > 0:
+        from .complex_data import estimate_thermal_sigma
+        s_th = estimate_thermal_sigma(
+            amp_4ch_raw, pm["snr"] if pha is not None else None)
+        for c in (1, 2):
+            denoised[c] = np.sqrt(np.maximum(
+                denoised[c] ** 2 - cfg.thermal_debias * s_th ** 2, 0.0))
+        if verbose:
+            print(f"  [thermal-debias] sigma_th={s_th:.2f} "
+                  f"t={cfg.thermal_debias}")
 
     del model, masker, opt, noisy_t, acc
     if model_ema is not None:

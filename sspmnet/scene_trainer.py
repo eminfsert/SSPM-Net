@@ -65,10 +65,20 @@ def _prep_patch(entry, q99, cfg, device):
         d["ar"], d["ai"] = ri_t[0:1], ri_t[1:2]
         with torch.no_grad():
             if cfg.guide_tv:
-                guide = (ri_t ** 2).mean(dim=(0, 1)).sqrt()[None, None]
-                d["tvw"] = guide_edge_weights(
-                    guide, alpha=cfg.guide_alpha,
-                    cv_protect=cfg.guide_cv_protect or None)
+                if cfg.polgroup_guides:
+                    g_co = (ri_t[:, [0, 3]] ** 2).mean(dim=(0, 1)).sqrt()[None, None]
+                    g_x = (ri_t[:, [1, 2]] ** 2).mean(dim=(0, 1)).sqrt()[None, None]
+                    w_co = guide_edge_weights(g_co, alpha=cfg.guide_alpha,
+                                              cv_protect=cfg.guide_cv_protect or None)
+                    w_x = guide_edge_weights(g_x, alpha=cfg.guide_alpha,
+                                             cv_protect=cfg.guide_cv_protect or None)
+                    d["tvw"] = tuple(torch.cat([c, x, x, c], dim=1)
+                                     for c, x in zip(w_co, w_x))
+                else:
+                    guide = (ri_t ** 2).mean(dim=(0, 1)).sqrt()[None, None]
+                    d["tvw"] = guide_edge_weights(
+                        guide, alpha=cfg.guide_alpha,
+                        cv_protect=cfg.guide_cv_protect or None)
             if cfg.guide_nlm:
                 d["nl_ref"] = _box_blur(0.5 * (d["ar"] + d["ai"]), k=3, passes=1)
 
@@ -349,12 +359,14 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
         nlw_b = stack("nl_w", crops)
         nlsig_b = stack("nl_sigma_map", crops)
         nlref_b = stack("nl_ref", crops)
+        _dg = [[0, 3], [1, 2]] if cfg.polgroup_guides else None
         l_nl = (polarimetric_nl_loss(
                     d_out, nlref_b if nlref_b is not None else noisy_b,
                     cfg.nlm_window, cfg.nlm_sigma,
-                    pixel_weight=nlw_b, sigma_map=nlsig_b)
+                    pixel_weight=nlw_b, sigma_map=nlsig_b, dist_groups=_dg)
                 if cfg.nlm_lambda > 0 else torch.tensor(0.0, device=device))
-        l_white = (ratio_whiteness_loss(d_out, noisy_b, lags=cfg.whiteness_lags)
+        l_white = (ratio_whiteness_loss(d_out, noisy_b, lags=cfg.whiteness_lags,
+                                        per_channel=cfg.polgroup_guides)
                    if cfg.whiteness_lambda > 0
                    else torch.tensor(0.0, device=device))
 
@@ -453,7 +465,10 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
                     prot = torch.maximum(prot, d["edge_full"])
                 acc = nl_polish(acc, window=cfg.polish_window,
                                 sigma=cfg.polish_sigma, strength=cfg.polish,
-                                protect=prot).clamp(0, 1)
+                                protect=prot,
+                                dist_groups=([[0, 3], [1, 2]]
+                                             if cfg.polgroup_guides else None)
+                                ).clamp(0, 1)
 
             if cfg.edge_boost > 0 and d["edge_full"] is not None:
                 m_edge = _box_blur(d["edge_full"], k=3, passes=1)
@@ -463,8 +478,18 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
                 acc = (acc + cfg.edge_boost * m_edge
                        * (acc - _box_blur(acc, k=3, passes=1))).clamp(0, 1)
 
-        outs.append((acc[0].cpu().numpy()
-                     * q99.squeeze()[:, None, None]).astype(np.float32))
+        out_np = acc[0].cpu().numpy() * q99.squeeze()[:, None, None]
+        if cfg.thermal_debias > 0:
+            from .complex_data import estimate_thermal_sigma
+            snr_np = (d["snr"][0, 0].cpu().numpy()
+                      if d.get("snr") is not None else None)
+            amp_raw = d["noisy"][0].cpu().numpy() \
+                * q99.squeeze()[:, None, None]      # clip at 5*q99 is far
+            s_th = estimate_thermal_sigma(amp_raw, snr_np)  # above the dark
+            for c in (1, 2):                                # pixels used
+                out_np[c] = np.sqrt(np.maximum(
+                    out_np[c] ** 2 - cfg.thermal_debias * s_th ** 2, 0.0))
+        outs.append(out_np.astype(np.float32))
 
     if verbose:
         print(f"  [final] {'EMA' if cfg.use_ema else 'raw'} weights, "

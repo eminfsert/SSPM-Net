@@ -215,3 +215,28 @@ def load_scene_patches(scene_dir: str, calibrate: str = "l1"):
             entry["pha"] = None
         patches.append(entry)
     return patches
+
+
+def estimate_thermal_sigma(amp_4ch: np.ndarray, snr: np.ndarray = None) -> float:
+    """Additive thermal-noise sigma on the cross-pol AMPLITUDE.
+
+    HV and VH are the same physical channel measured twice: the speckle is
+    shared, the thermal noise is independent, so on pixels where the shared
+    signal is negligible E[(a_HV - a_VH)^2] ~= 2 sigma_th^2. Those pixels
+    are selected as dark (lowest 30% of the cross-pol span) AND, when the
+    phase reciprocity ``snr`` map is available, low-coherence (lowest 20%
+    of the map); without a map, the darkest 10% of the span is used.
+    Measured on this project's real patch: sigma_th ~= 11.9 (uint8 amp
+    units) while dark-area mean amplitude is ~9 — i.e. SNR < 1 there.
+    """
+    a1 = amp_4ch[1].astype(np.float64)
+    a2 = amp_4ch[2].astype(np.float64)
+    span = 0.5 * (a1 + a2)
+    if snr is not None:
+        mask = (span < np.percentile(span, 30)) & \
+               (np.asarray(snr) < np.quantile(np.asarray(snr), 0.2))
+    else:
+        mask = span < np.percentile(span, 10)
+    if mask.sum() < 100:                    # degenerate scene: fall back
+        mask = span < np.percentile(span, 30)
+    return float(np.sqrt(((a1 - a2) ** 2)[mask].mean() / 2.0))

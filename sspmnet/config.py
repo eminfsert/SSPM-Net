@@ -59,6 +59,13 @@ class Config:
     # updates the running buffers); "group": GroupNorm(min(8,C), C).
     norm: str = "batch"
 
+    # ── Cross-pol pair input ─────────────────────────────────────────
+    # When True the cross-pol branch receives BOTH reciprocal planes
+    # (self first, reciprocal second): HV/VH are the same physical channel
+    # measured twice with independent thermal noise, so the second plane
+    # is a genuine extra look the branch can fuse spatially.
+    xpol_pair_input: bool = False
+
     # ── Device ───────────────────────────────────────────────────────
     device: str = "auto"
 

@@ -36,15 +36,17 @@ class DenoiseBranch(nn.Module):
     CNN              -> LH+HL+HH sub-bands (local edges, high noise)
     """
 
-    def __init__(self, cfg: Config, feat_out: int = 64):
+    def __init__(self, cfg: Config, feat_out: int = 64, in_channels: int = 1):
         super().__init__()
         drop_p = cfg.dropout_rate
+        self.in_channels = in_channels
 
         self.freq_decomp = FrequencyDecomposition()
 
-        # Swin processes the LL sub-band (1 channel)
+        # Swin processes the LL sub-band(s); with in_channels > 1 (paired
+        # reciprocal input) the extra plane is fused here, output stays 1.
         self.ll_branch = HighFreqBranch(
-            in_channels=1,
+            in_channels=in_channels,
             embed_dim=cfg.high_freq_embed_dim,
             depths=cfg.high_freq_depths,
             num_heads=cfg.high_freq_num_heads,
@@ -62,7 +64,7 @@ class DenoiseBranch(nn.Module):
         # field doubles with each downsampling).
         self.levels = max(1, int(cfg.wavelet_levels))
         self.hf_branch = LowFreqBranch(
-            in_channels=3,
+            in_channels=3 * in_channels,
             mid_channels=cfg.low_freq_channels,
             num_blocks=cfg.low_freq_num_blocks,
             out_channels=3,
@@ -82,7 +84,7 @@ class DenoiseBranch(nn.Module):
         self.drop_recon = make_dropout(drop_p, cfg.dropout_style)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """x: (B, 1, H, W) -> feature map (B, D, H, W)."""
+        """x: (B, in_channels, H, W) -> feature map (B, D, H, W)."""
         _, _, H, W = x.shape
 
         # Recursive decomposition: keep each level's detail bands and the
@@ -146,7 +148,14 @@ class SSPMNet(nn.Module):
 
         # Asymmetric branches: co-pol (HH/VV) and cross-pol (HV/VH)
         self.copol_branch = DenoiseBranch(cfg, feat_out=D)
-        self.xpol_branch = DenoiseBranch(cfg, feat_out=D)
+        # With xpol_pair_input the cross-pol branch sees BOTH reciprocal
+        # planes (self first, reciprocal second): HV and VH are the same
+        # physical channel measured twice with independent thermal noise
+        # and partially decorrelated speckle, so the second plane is a
+        # genuine extra look the branch can fuse spatially.
+        self.xpol_pair_input = bool(getattr(cfg, "xpol_pair_input", False))
+        self.xpol_branch = DenoiseBranch(
+            cfg, feat_out=D, in_channels=2 if self.xpol_pair_input else 1)
 
         self.cross_attn = CrossPolarizationAttention(
             feat_dim=D,
@@ -170,8 +179,12 @@ class SSPMNet(nn.Module):
 
         feat_hh = self.copol_branch(hh)
         feat_vv = self.copol_branch(vv)     # shares weights with HH
-        feat_hv = self.xpol_branch(hv)
-        feat_vh = self.xpol_branch(vh)      # shares weights with HV
+        if self.xpol_pair_input:
+            feat_hv = self.xpol_branch(torch.cat([hv, vh], dim=1))
+            feat_vh = self.xpol_branch(torch.cat([vh, hv], dim=1))
+        else:
+            feat_hv = self.xpol_branch(hv)
+            feat_vh = self.xpol_branch(vh)  # shares weights with HV
 
         features = self.cross_attn([feat_hh, feat_hv, feat_vh, feat_vv])
         outputs = [self.refinements[i](features[i]) for i in range(4)]

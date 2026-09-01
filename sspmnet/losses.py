@@ -146,7 +146,8 @@ def bound_loss(denoised: torch.Tensor) -> torch.Tensor:
 def polarimetric_nl_loss(x: torch.Tensor, ref: torch.Tensor,
                          window: int = 7, sigma: float = 0.1,
                          pixel_weight: torch.Tensor = None,
-                         sigma_map: torch.Tensor = None) -> torch.Tensor:
+                         sigma_map: torch.Tensor = None,
+                         dist_groups=None) -> torch.Tensor:
     """Non-local self-similarity loss.
 
     Weights neighbors by similarity in the reference image and pulls each
@@ -156,6 +157,11 @@ def polarimetric_nl_loss(x: torch.Tensor, ref: torch.Tensor,
     feedback map boosts it where the observation is noise-dominated.
     ``sigma_map`` ((B, 1, H, W)) replaces the scalar ``sigma`` per pixel —
     a larger sigma accepts more neighbors, averaging harder.
+    ``dist_groups`` (list of channel-index lists, e.g. [[0,3],[1,2]])
+    splits the patch distance: each group's neighbor similarity is decided
+    only by its own channels. The default (None) sums the distance over
+    ALL channels, letting the bright co-pol channels dominate which
+    neighbors count as "similar" for the dark cross-pol channels.
     """
     B, C, H, W = x.shape
     pad = window // 2
@@ -163,14 +169,19 @@ def polarimetric_nl_loss(x: torch.Tensor, ref: torch.Tensor,
 
     ref_unf = F.unfold(ref, kernel_size=window, padding=pad).view(B, C, K, H, W)
     ref_self = ref.unsqueeze(2)
-    dist = ((ref_unf - ref_self) ** 2).sum(dim=1)
+    d2 = (ref_unf - ref_self) ** 2
     sig2 = (sigma_map ** 2 if sigma_map is not None else sigma * sigma)
-    w = torch.exp(-dist / (sig2 + 1e-12))
-    w[:, K // 2, :, :] = 0.0
-    w_norm = w / (w.sum(dim=1, keepdim=True) + 1e-8)
-
     x_unf = F.unfold(x, kernel_size=window, padding=pad).view(B, C, K, H, W)
-    x_avg = (x_unf * w_norm.unsqueeze(1)).sum(dim=2)
+
+    groups = dist_groups if dist_groups is not None else [list(range(C))]
+    x_avg = torch.empty_like(x)
+    for g in groups:
+        # distance normalized per channel count so sigma keeps its meaning
+        dist = d2[:, g].sum(dim=1) * (C / len(g))
+        w = torch.exp(-dist / (sig2 + 1e-12))
+        w[:, K // 2, :, :] = 0.0
+        w_norm = w / (w.sum(dim=1, keepdim=True) + 1e-8)
+        x_avg[:, g] = (x_unf[:, g] * w_norm.unsqueeze(1)).sum(dim=2)
     sq = (x - x_avg) ** 2
     if pixel_weight is not None:
         sq = sq * pixel_weight
@@ -210,7 +221,8 @@ def edge_fidelity_loss(d: torch.Tensor, guide_log: torch.Tensor,
 
 def nl_polish(x: torch.Tensor, guide: torch.Tensor = None, window: int = 9,
               sigma: float = 0.1, strength: float = 0.5,
-              protect: torch.Tensor = None) -> torch.Tensor:
+              protect: torch.Tensor = None,
+              dist_groups=None) -> torch.Tensor:
     """Final-stage non-local refinement of a denoised image.
 
     One guided-NLM pass whose similarity weights come from the (already
@@ -224,6 +236,8 @@ def nl_polish(x: torch.Tensor, guide: torch.Tensor = None, window: int = 9,
     many similar neighbors in the cleaned image — is averaged out.
     ``protect`` ((B, 1, H, W), in [0, 1]) shuts the refinement off on
     heterogeneous / deterministic pixels (CV gate, phase 'det' map).
+    ``dist_groups`` — as in :func:`polarimetric_nl_loss`: per-group
+    neighbor similarity instead of one channel-summed distance.
     """
     with torch.no_grad():
         if guide is None:
@@ -232,18 +246,23 @@ def nl_polish(x: torch.Tensor, guide: torch.Tensor = None, window: int = 9,
         pad = window // 2
         K = window * window
         g_unf = F.unfold(guide, kernel_size=window, padding=pad).view(B, C, K, H, W)
-        dist = ((g_unf - guide.unsqueeze(2)) ** 2).sum(dim=1)
-        w = torch.exp(-dist / (sigma * sigma + 1e-12))
-        w[:, K // 2, :, :] = 0.0
-        w_norm = w / (w.sum(dim=1, keepdim=True) + 1e-8)
+        d2 = (g_unf - guide.unsqueeze(2)) ** 2
         x_unf = F.unfold(x, kernel_size=window, padding=pad).view(B, C, K, H, W)
-        avg = (x_unf * w_norm.unsqueeze(1)).sum(dim=2)
+        groups = dist_groups if dist_groups is not None else [list(range(C))]
+        avg = torch.empty_like(x)
+        for g in groups:
+            dist = d2[:, g].sum(dim=1) * (C / len(g))
+            w = torch.exp(-dist / (sigma * sigma + 1e-12))
+            w[:, K // 2, :, :] = 0.0
+            w_norm = w / (w.sum(dim=1, keepdim=True) + 1e-8)
+            avg[:, g] = (x_unf[:, g] * w_norm.unsqueeze(1)).sum(dim=2)
         s_px = strength * (1.0 - protect) if protect is not None else strength
         return (1.0 - s_px) * x + s_px * avg
 
 
 def ratio_whiteness_loss(denoised: torch.Tensor, noisy: torch.Tensor,
-                         lags=(1, 2, 3), eps: float = 1e-3) -> torch.Tensor:
+                         lags=(1, 2, 3), eps: float = 1e-3,
+                         per_channel: bool = False) -> torch.Tensor:
     """Spatial-whiteness penalty on the intensity ratio image.
 
     For a perfect result the ratio noisy^2 / denoised^2 is pure speckle —
@@ -255,12 +274,27 @@ def ratio_whiteness_loss(denoised: torch.Tensor, noisy: torch.Tensor,
     CAUTION: oversampled real data has correlated speckle, so keep the
     lags above the oversampling correlation length there (or use only on
     simulated speckle, which is white by construction).
+
+    ``per_channel=True`` normalizes each channel's autocorrelation by its
+    OWN ratio variance and averages the penalties with equal channel
+    weight; the default pools everything, which dilutes the dark
+    cross-pol channels' residual-speckle signal under the co-pol one.
     """
     r = (noisy ** 2 + eps) / (denoised ** 2 + eps)
     mu = _box_blur(r, k=9, passes=1)
     e = r / (mu + 1e-6) - 1.0
-    var = (e ** 2).mean() + 1e-8
     loss = denoised.new_zeros(())
+    if per_channel:
+        var = (e ** 2).mean(dim=(0, 2, 3)) + 1e-8            # (C,)
+        for lag in lags:
+            for dim in (-2, -1):
+                n = e.shape[dim] - lag
+                a = e.narrow(dim, 0, n)
+                b = e.narrow(dim, lag, n)
+                corr = (a * b).mean(dim=(0, 2, 3)) / var     # (C,)
+                loss = loss + (corr ** 2).mean()
+        return loss
+    var = (e ** 2).mean() + 1e-8
     for lag in lags:
         for dim in (-2, -1):
             n = e.shape[dim] - lag

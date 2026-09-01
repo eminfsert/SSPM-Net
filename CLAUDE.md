@@ -180,12 +180,17 @@ ENL-ROI >= +50% at equal EPI.
   nothing. Re-check lv2 once during scene-scale training (256 px crops cut
   context). Table: docs/figures/metrics_a3_rf.txt.
 
+- tv_mult sweep SETTLED (2026-09-01, pixel+group base): the old-base
+  disagreement is gone — the operating point is a flat plateau (0.16 dB
+  total PSNR(HH) spread over tv 5..15, PSNR(HV) flat). GT accuracy and
+  real EPI/ENLr(HH) mildly prefer tv5; ENL-ROI and ENLr(HV) mildly prefer
+  high tv. `tv_mult=10` stays the default (mid-plateau); tv5 is the
+  max-accuracy point. Table: docs/figures/metrics_tvmult_sweep.txt.
+
 **Open items:** flat/rural patch test (the natural place where
 `phase_surface_boost` could still help — an urban patch has little surface
-scattering); a dedicated `tv_mult` sweep (ratio-ENL and ENL-ROI disagree
-about the operating point: `tv_mult=7.9` gives the best ENLr(HV) 0.509 vs
-0.439 at 10, while ENL-ROI prefers 10); obtain signed float SLC; decide on
-merging the feature branch.
+scattering); obtain signed float SLC; decide on merging the feature
+branch; Track B awaits the user's ~16 scene patches in `data/scene/`.
 
 ## Claude memory restore
 

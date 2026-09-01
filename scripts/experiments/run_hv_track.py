@@ -115,12 +115,12 @@ runs_s, runs_r = {}, {}
 for name, tag, extra, mextra in VARIANTS:
     print(f"\n=== synth {name} ===", flush=True)
     runs_s[name] = cached(tag.format(p="synth") + ".npy", lambda: denoise(
-        amp_sim, TrainConfig(**STACK, **extra, whiteness_lags=(1, 2, 3),
+        amp_sim, TrainConfig(**{**STACK, **extra}, whiteness_lags=(1, 2, 3),
                              model_cfg={**PG, **mextra}),
         ri_pair=ri_sim, pha=maps_sim)["denoised"]).astype(np.float64)
     print(f"\n=== real {name} ===", flush=True)
     runs_r[name] = cached(tag.format(p="real") + ".npy", lambda: denoise(
-        amp, TrainConfig(**STACK, **extra, whiteness_lags=(3, 4, 5),
+        amp, TrainConfig(**{**STACK, **extra}, whiteness_lags=(3, 4, 5),
                          model_cfg={**PG, **mextra}),
         ri_pair=ri, pha=maps_real)["denoised"]).astype(np.float64)
 

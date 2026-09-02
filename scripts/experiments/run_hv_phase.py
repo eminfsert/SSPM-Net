@@ -102,12 +102,15 @@ maps_sim = phase_feedback_maps(z=z)
 # cross-pol mean AND low local CV of the 8-look span, eroded 5x5 so no
 # edge pixel survives. The clean proxy is a denoise of the same patch, so
 # the same mask is valid for the synthetic protocol.
+# (the 8-look span's CV floor is ~0.30-0.33 on this oversampled data, so
+# the homogeneity threshold is 0.40; 21x21 statistics; ~11.6k px, matching
+# the Track C revision mask)
 span8 = np.sqrt((ri.astype(np.float64) ** 2).mean(axis=(0, 1)))
-mu_s = _local_mean(span8, 9)
-cv_s = np.sqrt(np.maximum(_local_mean(span8 ** 2, 9) - mu_s ** 2, 0)) / (mu_s + 1e-6)
+mu_s = _local_mean(span8, 21)
+cv_s = np.sqrt(np.maximum(_local_mean(span8 ** 2, 21) - mu_s ** 2, 0)) / (mu_s + 1e-6)
 x2 = 0.5 * (ri[:, 1] + ri[:, 2]).mean(axis=0).astype(np.float64)
-x2s = _local_mean(x2, 9)
-m0 = (x2s < np.percentile(x2s, 20)) & (cv_s < 0.25)
+x2s = _local_mean(x2, 21)
+m0 = (x2s < np.percentile(x2s, 20)) & (cv_s < 0.40)
 water = _local_mean(m0.astype(np.float64), 5) > 0.999
 print(f"water mask: {int(water.sum())} px "
       f"(HV noisy mean {amp[1][water].mean():.2f}, "

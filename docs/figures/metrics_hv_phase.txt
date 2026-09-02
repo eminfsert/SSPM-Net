@@ -1,0 +1,79 @@
+Synthetic-GT (vs known clean; scale-matched); base = pixel+group + xpol_pair_input; waterHP = flat-water high-pass std of HV (clean HV: 0.4588, CV 0.2594)
+  Method                 PSNR(HH)   PSNR(HV)   SSIM(HV)    EPI(HH)    EPI(HV)    ENL(HV)  darkRelHV   darkBias    waterHP    waterCV
+  pg                      24.5371    23.0567     0.8346     0.8404     0.8260   550.9060     0.5953     6.2492     0.6296     0.1552
+  base                    24.4542    23.1844     0.8349     0.8402     0.8326  2357.2856     0.6298     6.6198     0.4047     0.1003
+  D1f                     24.4473    23.1365     0.8309     0.8400     0.8337  2493.0052     0.7049     7.4531     0.3702     0.0878
+  D1f+tdb.5               24.4502    23.2277     0.8369     0.8401     0.8331  2043.7705     0.6090     6.3834     0.3827     0.0970
+  D1f+tdb1                24.4479    23.2919     0.8417     0.8400     0.8323  1692.5451     0.5310     5.5079     0.3948     0.1064
+  D2                      24.6494    22.8771     0.8258     0.8483     0.8274  2455.9038     0.6166     6.4304     0.4473     0.1161
+  D3                      24.4502    23.1906     0.8354     0.8401     0.8329  1918.2037     0.6283     6.6130     0.3952     0.1010
+  D4                      24.4487    23.0840     0.8306     0.8399     0.8304  1856.6227     0.6707     7.0720     0.4228     0.0986
+  D1f+tdb1.5              24.4519    23.3441     0.8461     0.8401     0.8322  1370.8040     0.4609     4.7103     0.4027     0.1154
+  D1f+tdb2                24.4519    23.3845     0.8498     0.8401     0.8318  1095.7461     0.3995     3.9998     0.4093     0.1247
+  D1f-l2                  24.4470    23.2417     0.8359     0.8402     0.8309  5156.9497     0.6494     6.6670     0.4077     0.0842
+  D1f-l2+tdb.5            24.4477    23.2769     0.8381     0.8403     0.8309  4846.8648     0.6153     6.2701     0.4097     0.0867
+  D1f+D2                  24.6516    22.8097     0.8209     0.8484     0.8275  2717.7445     0.6909     7.2495     0.4130     0.1011
+  D1f+D3+D4               24.4496    23.0613     0.8279     0.8397     0.8322  1973.8767     0.7385     7.8310     0.3727     0.0851
+  D1f+tdb.5+D2+D3+D4      24.6479    22.8169     0.8236     0.8482     0.8249  2131.8373     0.6192     6.4541     0.4313     0.1150
+  base@s43                24.4408    23.0854     0.8329     0.8338     0.8302   943.9702     0.6652     7.0895     0.3562     0.1018
+  D1f+tdb1@s43            24.4360    23.1992     0.8395     0.8335     0.8299   758.3352     0.5680     6.0018     0.3394     0.1057
+
+Real patch (noisy-reference; ratio-ENL ideal ~= 1; HVdarkMean = mean HV output on the water mask; waterHP/CV = grain)
+  Method               corr(HV,VH) ENL-ROI(HV)     EPI(HH)     EPI(HV)    ENLr(HH)    ENLr(HV)  HVdarkMean     waterHP     waterCV
+  pg                        0.9996      1.2773      0.6772      0.7136      0.9036      1.1204     16.6847      0.4173      0.0986
+  base                      0.9998      1.1764      0.6669      0.7205      0.8793      1.0511     16.9988      0.4841      0.0967
+  D1f                       0.9998      1.2872      0.6662      0.7275      0.8808      1.1082     19.1173      0.5265      0.0894
+  D1f+tdb.5                 0.9998      1.2657      0.6660      0.7267      0.8786      1.0724     16.8614      0.5339      0.1058
+  D1f+tdb1                  0.9998      1.2452      0.6663      0.7264      0.8790      1.0255     15.2601      0.5297      0.1181
+  D2                        0.9998      1.1444      0.6695      0.7125      0.8865      0.9934     16.9829      0.3564      0.0857
+  D3                        0.9998      1.1676      0.6669      0.7226      0.8802      1.0530     16.9598      0.5029      0.0994
+  D4                        0.9998      1.1914      0.6674      0.7067      0.8806      1.0216     18.7064      0.4619      0.0833
+  D1f+tdb1.5                0.9998      1.2283      0.6662      0.7260      0.8783      0.9653     13.8840      0.5234      0.1295
+  D1f+tdb2                  0.9998      1.2140      0.6665      0.7259      0.8787      0.8952     12.6747      0.5166      0.1418
+  D1f-l2                    0.9998      1.5692      0.6663      0.7176      0.8737      1.1248     17.4217      0.4060      0.0830
+  D1f-l2+tdb.5              0.9998      1.5472      0.6663      0.7174      0.8736      1.1076     16.5297      0.4055      0.0878
+  D1f+D2                    0.9998      1.2575      0.6688      0.7202      0.8868      1.0597     19.1913      0.3671      0.0776
+  D1f+D3+D4                 0.9998      1.3008      0.6663      0.7178      0.8797      1.0797     20.6331      0.5415      0.0831
+  D1f+tdb.5+D2+D3+D4        0.9998      1.2420      0.6686      0.7107      0.8860      1.0080     18.0365      0.3651      0.0832
+  base@s43                  0.9998      1.1774      0.6603      0.7164      0.8910      1.0710     17.3555      0.5657      0.1076
+  D1f+tdb1@s43              0.9998      1.2585      0.6602      0.7241      0.8931      1.0575     15.6491      0.5990      0.1270
+
+Verdict (Track D, 2026-09-02): NEGATIVE against the bar (GT PSNR(HV) >= +0.3 dB
+AND water grain <= base AND real EPI(HV) >= base). No knob or combination
+meets it. Details:
+ * Single-seed noise floor (base vs base@s43): PSNR(HV) 0.10 dB, SSIM 0.002,
+   real EPI(HV) 0.004, waterHP 0.08 -> differences below ~0.1 dB are noise.
+ * D1 fused target with L1 (D1f): NEGATIVE alone (-0.05 dB, dark bias
+   6.6->7.5, real dark mean 17.0->19.1). Cause: the L1 MEDIAN of the mean of
+   two targets depends on their correlation (shared speckle on bright
+   pixels, independent thermal noise on dark ones) -> a spatially varying
+   scale shift that brightens the floor. D1f-l2 (mean-seeking fit,
+   pre-scaled to the L1 convention) removes it (bias 6.67 ~ base) and
+   gives +0.06 dB / cleanest real flats (waterHP -16%) but real EPI(HV)
+   slightly down. Confirms the plan's diagnosis; gain is inside noise.
+ * D1 target-domain thermal debias (D1f+tdb k): the ONLY consistent gain,
+   monotone in k: +0.04/+0.11/+0.16/+0.20 dB PSNR(HV) at k=0.5/1/1.5/2,
+   SSIM(HV) 0.835->0.850, dark-bin bias -40% at k=2. REPLICATES at seed
+   43 (+0.11 dB at k=1, bias 7.09->6.00). Real patch: EPI(HV) up
+   (0.7205->0.726), but the water mean drops (17.0->12.7 at k=2), ENLr(HV)
+   overshoots below 1 (0.90) and the visible grain contrast rises
+   (waterCV 0.097->0.142) - the same trade-off as the post-hoc
+   thermal_debias, milder. Radiometrically correct, visually costly.
+   k=1 (bias -17%, CV 0.118) is the balanced point if enabled.
+ * D2 snr map as network input: NEGATIVE on GT (-0.31 dB, SSIM/EPI down)
+   although it gives the cleanest real flats (waterHP -26%, ENLr(HV) 0.99)
+   at a real EPI(HV) cost (0.7205->0.7125): the network uses the map to
+   over-smooth low-snr areas. Also drags every combination down.
+ * D3 helix protection: neutral (+0.006 dB GT - the synthetic has no helical
+   scatterers; real EPI(HV) +0.002, waterHP +4%). The helix map is a valid
+   descriptor (bright-10% 0.31 vs 0.135) but not a useful regularizer knob.
+ * D4 snr-gated Rayleigh terms: NEGATIVE (-0.10 dB, dark bias 6.6->7.1,
+   real floor brightens 17.0->18.7, EPI(HV) 0.7067): the factorization /
+   histogram terms were pinning the dark level; relaxing them frees it.
+ * Combinations are worse than their best member (D2/D4 dominate).
+Conclusion: phase evidence beyond the existing snr feedback does not feed
+the cross-pol channel; the plateau is structural (thermal-limited dark
+pixels, 8-bit clipping). Recommended defaults unchanged
+(pixel+group + xpol_pair_input). Optional: xpol_fused_target +
+xpol_target_debias=1.0 for radiometric deliverables. Next: Track E
+(docs/plans/track-e-fullrange-logdomain-plan.md).

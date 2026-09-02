@@ -211,27 +211,31 @@ ENL-ROI >= +50% at equal EPI.
   flat, phase_fidelity 0.75 slightly worse. Tables/figures:
   docs/figures/metrics_hv_track.txt, compare_hv_winner.png.
 
-- Track D IMPLEMENTED (2026-09-02, commit 6856548; results pending —
-  resume point): "feed the cross-pol channel with phase", plan in
-  `docs/plans/track-d-hv-phase-plan.md`. Knobs (all default off):
-  `xpol_fused_target` (D1, mean of the two xpol targets),
-  `xpol_target_debias` (D1, target-domain thermal debias),
-  `model_cfg={"xpol_snr_input": True}` (D2, snr map as xpol-branch input
-  plane via `SSPMNet.forward(x, aux=)`), `phase_helix_protect` (D3, new
-  `helix` map in `phase_feedback_maps`), `fact_snr_gate` (D4, snr-gated
-  speckle-factor/histogram terms; `compute_soft_histogram(weight=)`).
-  Experiment: `scripts/experiments/run_hv_phase.py --combo` — table has
-  the mandatory flat-water grain columns (waterHP/waterCV) now. Results
-  go to docs/figures/metrics_hv_phase.txt when done. Grounding diagnostics
-  (2026-09-01, keep): phase files are pixel-level INCONSISTENT with
-  the |Re|/|Im| files (quadrant-phase corr ~0.02) so coherent HV+VH
-  fusion is impossible — phase is usable only as spatial maps; the
-  new `helix` map coh(e^{2i(phi_HH-phi_HV)}) fires on man-made
-  structure (0.337 bright vs 0.129 random null); measured on
-  synthetic: AVERAGING the two xpol targets cuts supervision RMSE
-  -26% (mixing the L1 losses — current w_r — gains nothing), and
-  target-domain thermal debias removes the dark bias (+4.5 -> +0.6)
-  without the post-hoc grain amplification.
+- Track D RESULT (2026-09-02): NEGATIVE against the bar — plateau
+  confirmed. Knobs (all default off, kept for the record):
+  `xpol_fused_target` (+`xpol_fused_loss` "l1"/"l2"), `xpol_target_debias`,
+  `model_cfg={"xpol_snr_input": True}` (`SSPMNet.forward(x, aux=)`),
+  `phase_helix_protect` (new `helix` map), `fact_snr_gate`
+  (`compute_soft_histogram(weight=)`). Single-seed noise floor measured:
+  PSNR(HV) 0.10 dB (base@s42 vs @s43). Only consistent gain: target-domain
+  thermal debias (D1f+tdb k=1: +0.11 dB, replicates at seed 43, dark bias
+  -17%; k=2: +0.20 dB, bias -40%) — but real water mean drops and grain
+  contrast rises (CV 0.097->0.118 at k=1), the post-hoc-debias trade-off
+  in milder form; use only for radiometric deliverables. L1 fusion alone
+  is negative (correlation-dependent median shift; "l2" fixes the bias,
+  gain inside noise). D2 -0.31 dB (over-smooths low-snr areas; cleanest
+  real flats but EPI down), D3 neutral, D4 negative, combos worse. Full
+  table + verdict: docs/figures/metrics_hv_phase.txt, compare_hv_phase.png,
+  phase_helix_map.png. Plan: docs/plans/track-d-hv-phase-plan.md.
+
+- NEXT (resume point): **Track E — full-range data + log-domain
+  training**, plan in `docs/plans/track-e-fullrange-logdomain-plan.md`.
+  Order: E1 censored one-sided loss on saturated targets (existing data,
+  small change) -> E2 `domain="log"` pipeline (full-range
+  `data/example_quadpol.npy`, log-Rayleigh histogram) -> E3/Track B when
+  the user supplies full-range Re/Im and the ~16 scene patches. Bar:
+  recover >= +1.0 dB of the measured -1.7 dB clipping cost on GT at equal
+  EPI, no flat grain increase.
 
 **Open items:** flat/rural patch test (the natural place where
 `phase_surface_boost` could still help — an urban patch has little surface

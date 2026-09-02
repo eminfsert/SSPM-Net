@@ -166,8 +166,18 @@ COMBO = [
      {**D1, "xpol_target_debias": 0.5, "phase_helix_protect": 0.5,
       "fact_snr_gate": 1.0}, {**BASE_M, "xpol_snr_input": True}),
 ]
+# seed-noise check for the finalists: the same configs at a second init
+# seed; the base-vs-base spread is the protocol's noise floor for a
+# single-seed comparison
+SEED2 = [
+    ("base@s43",      "hvp_{p}_base_s43", {"init_seed": 43}, BASE_M),
+    ("D1f+tdb1@s43",  "hvp_{p}_d1f_tdb10_s43",
+     {**D1, "xpol_target_debias": 1.0, "init_seed": 43}, BASE_M),
+]
 if "--combo" in sys.argv:
     VARIANTS += COMBO
+if "--seed2" in sys.argv:
+    VARIANTS += SEED2
 
 runs_s, runs_r = {}, {}
 for name, tag, extra, mcfg in VARIANTS:

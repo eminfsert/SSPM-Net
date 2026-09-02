@@ -211,9 +211,18 @@ ENL-ROI >= +50% at equal EPI.
   flat, phase_fidelity 0.75 slightly worse. Tables/figures:
   docs/figures/metrics_hv_track.txt, compare_hv_winner.png.
 
-- NEXT (planned, NOT yet executed — resume point): Track D "feed the
-  cross-pol channel with phase" — full plan in
-  `docs/plans/track-d-hv-phase-plan.md`. Grounding diagnostics
+- Track D IMPLEMENTED (2026-09-02, commit 6856548; results pending —
+  resume point): "feed the cross-pol channel with phase", plan in
+  `docs/plans/track-d-hv-phase-plan.md`. Knobs (all default off):
+  `xpol_fused_target` (D1, mean of the two xpol targets),
+  `xpol_target_debias` (D1, target-domain thermal debias),
+  `model_cfg={"xpol_snr_input": True}` (D2, snr map as xpol-branch input
+  plane via `SSPMNet.forward(x, aux=)`), `phase_helix_protect` (D3, new
+  `helix` map in `phase_feedback_maps`), `fact_snr_gate` (D4, snr-gated
+  speckle-factor/histogram terms; `compute_soft_histogram(weight=)`).
+  Experiment: `scripts/experiments/run_hv_phase.py --combo` — table has
+  the mandatory flat-water grain columns (waterHP/waterCV) now. Results
+  go to docs/figures/metrics_hv_phase.txt when done. Grounding diagnostics
   (2026-09-01, keep): phase files are pixel-level INCONSISTENT with
   the |Re|/|Im| files (quadrant-phase corr ~0.02) so coherent HV+VH
   fusion is impossible — phase is usable only as spatial maps; the

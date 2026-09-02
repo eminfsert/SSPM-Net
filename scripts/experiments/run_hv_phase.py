@@ -147,6 +147,11 @@ VARIANTS = [
     # of the fused target shifts with the HV-VH correlation (bright: shared
     # speckle; dark: independent thermal noise) — seen as a dark-area
     # brightening in the first D1f run
+    # the pseudo-amplitude targets carry (L1_RATIO^2 / 2) ~ 1.52 x the
+    # thermal power of the amplitude, so k ~ 1.5 is the physically exact
+    # debias level on the target scale; tdb.5 / tdb1 are conservative
+    ("D1f+tdb1.5", "hvp_{p}_d1f_tdb15", {**D1, "xpol_target_debias": 1.5}, BASE_M),
+    ("D1f+tdb2",   "hvp_{p}_d1f_tdb20", {**D1, "xpol_target_debias": 2.0}, BASE_M),
     ("D1f-l2",     "hvp_{p}_d1f_l2", {**D1, "xpol_fused_loss": "l2"}, BASE_M),
     ("D1f-l2+tdb.5", "hvp_{p}_d1f_l2_tdb05",
      {**D1, "xpol_fused_loss": "l2", "xpol_target_debias": 0.5}, BASE_M),

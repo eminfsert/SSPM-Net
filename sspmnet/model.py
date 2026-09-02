@@ -154,8 +154,13 @@ class SSPMNet(nn.Module):
         # and partially decorrelated speckle, so the second plane is a
         # genuine extra look the branch can fuse spatially.
         self.xpol_pair_input = bool(getattr(cfg, "xpol_pair_input", False))
+        # With xpol_snr_input an extra (non-image) plane — the phase
+        # reciprocity coherence — is appended to the cross-pol input.
+        self.xpol_snr_input = bool(getattr(cfg, "xpol_snr_input", False))
         self.xpol_branch = DenoiseBranch(
-            cfg, feat_out=D, in_channels=2 if self.xpol_pair_input else 1)
+            cfg, feat_out=D,
+            in_channels=(2 if self.xpol_pair_input else 1)
+            + (1 if self.xpol_snr_input else 0))
 
         self.cross_attn = CrossPolarizationAttention(
             feat_dim=D,
@@ -170,8 +175,12 @@ class SSPMNet(nn.Module):
             for _ in range(4)
         ])
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """x: (B, 4, H, W) in [0, 1] -> denoised (B, 4, H, W)."""
+    def forward(self, x: torch.Tensor, aux: torch.Tensor = None) -> torch.Tensor:
+        """x: (B, 4, H, W) in [0, 1] -> denoised (B, 4, H, W).
+
+        aux : (B, 1, H, W) optional auxiliary plane for the cross-pol
+        branch (the phase 'snr' map; used only with ``xpol_snr_input``).
+        """
         hh = x[:, 0:1]
         hv = x[:, 1:2]
         vh = x[:, 2:3]
@@ -179,12 +188,15 @@ class SSPMNet(nn.Module):
 
         feat_hh = self.copol_branch(hh)
         feat_vv = self.copol_branch(vv)     # shares weights with HH
-        if self.xpol_pair_input:
-            feat_hv = self.xpol_branch(torch.cat([hv, vh], dim=1))
-            feat_vh = self.xpol_branch(torch.cat([vh, hv], dim=1))
-        else:
-            feat_hv = self.xpol_branch(hv)
-            feat_vh = self.xpol_branch(vh)  # shares weights with HV
+        x_hv = [hv, vh] if self.xpol_pair_input else [hv]
+        x_vh = [vh, hv] if self.xpol_pair_input else [vh]
+        if self.xpol_snr_input:
+            if aux is None:
+                aux = torch.zeros_like(hv)
+            x_hv.append(aux)
+            x_vh.append(aux)
+        feat_hv = self.xpol_branch(torch.cat(x_hv, dim=1) if len(x_hv) > 1 else hv)
+        feat_vh = self.xpol_branch(torch.cat(x_vh, dim=1) if len(x_vh) > 1 else vh)
 
         features = self.cross_attn([feat_hh, feat_hv, feat_vh, feat_vv])
         outputs = [self.refinements[i](features[i]) for i in range(4)]

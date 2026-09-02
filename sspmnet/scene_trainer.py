@@ -83,7 +83,7 @@ def _prep_patch(entry, q99, cfg, device):
                 d["nl_ref"] = _box_blur(0.5 * (d["ar"] + d["ai"]), k=3, passes=1)
 
     d["phase_factor"] = d["fid_w"] = d["nl_w"] = d["det"] = d["snr"] = None
-    d["nl_sigma_map"] = None
+    d["nl_sigma_map"] = d["helix"] = d["fact_w"] = d["tgt_db2"] = None
     if entry.get("pha") is not None:
         pm = entry["pha"] if isinstance(entry["pha"], dict) else \
             phase_feedback_maps(pha=np.asarray(entry["pha"], np.float32),
@@ -110,6 +110,28 @@ def _prep_patch(entry, q99, cfg, device):
             d["tvw"] = guide_edge_weights(span_g, alpha=cfg.guide_alpha,
                                           cv_protect=cfg.guide_cv_protect or None)
         d["tvw"] = modulate_edge_weights(d["tvw"], d["phase_factor"])
+        if cfg.phase_helix_protect > 0 and "helix" in pm:      # D3
+            hx = torch.from_numpy(pm["helix"]).float()[None, None].to(device)
+            d["helix"] = hx
+            keep = 1.0 - cfg.phase_helix_protect * hx
+            k_h, k_w = modulate_edge_weights(
+                (torch.ones_like(keep[:, :, 1:]), torch.ones_like(keep[:, :, :, 1:])),
+                keep)
+            w_h, w_w = d["tvw"]
+            w_h = w_h.expand(-1, 4, -1, -1).clone()
+            w_w = w_w.expand(-1, 4, -1, -1).clone()
+            w_h[:, 1:3] = w_h[:, 1:3] * k_h
+            w_w[:, 1:3] = w_w[:, 1:3] * k_w
+            d["tvw"] = (w_h, w_w)
+        if cfg.fact_snr_gate > 0:                                # D4
+            d["fact_w"] = (1.0 - cfg.fact_snr_gate) + cfg.fact_snr_gate * snr_t
+    if cfg.xpol_target_debias > 0 and d["ri"] is not None:       # D1
+        from .complex_data import estimate_thermal_sigma
+        s_th = estimate_thermal_sigma(
+            amp, pm["snr"] if entry.get("pha") is not None else None)
+        s_n = torch.from_numpy(
+            (s_th / q99[1:3, 0, 0]).astype(np.float32)).to(device)
+        d["tgt_db2"] = cfg.xpol_target_debias * (s_n ** 2).view(1, 2, 1, 1)
 
     # edge mask for edge_boost / polish protection (as in trainer.py)
     d["edge_full"] = None
@@ -200,6 +222,8 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
     masker = QuadPolSpatialMasker(keep_prob=cfg.mask_keep_prob).to(device)
     crit = MaskedL1Loss()
     n_iters = cfg.iters
+    # D2: the snr map as the cross-pol branch's extra input plane
+    use_aux = bool((cfg.model_cfg or {}).get("xpol_snr_input")) and have_pha
 
     # ── per-patch speckle factor bank ──
     if cfg.use_speckle_factor:
@@ -254,7 +278,8 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
                 x_pw = stack("noisy", crops)
             tgt_pw = torch.cat([P[pi]["warm"][:, :, y:y + crop, x:x + crop]
                                 for pi, y, x in crops], dim=0)
-            loss_pw = ((model(x_pw) - tgt_pw) ** 2).mean()
+            aux_pw = stack("snr", crops) if use_aux else None
+            loss_pw = ((model(x_pw, aux=aux_pw) - tgt_pw) ** 2).mean()
             opt_pw.zero_grad()
             loss_pw.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -290,6 +315,8 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
         noisy_b = stack("noisy", crops)
         fid_b = stack("fid_w", crops)
         satk_b = stack("sat_keep", crops)
+        aux_b = stack("snr", crops) if use_aux else None
+        fact_b = stack("fact_w", crops)
         tvw_b = None
         if P[crops[0][0]]["tvw"] is not None:
             whs, wws = [], []
@@ -305,12 +332,13 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
                               for pi, y, x in crops], dim=0)
             tgt = torch.cat([P[pi]["ri"][1 - k:2 - k, :, y:y + crop, x:x + crop]
                              for pi, y, x in crops], dim=0)
-            d_out = model(x_in)
+            d_out = model(x_in, aux=aux_b)
 
             def _wmean(t, tgt_ch, use_fid=False):
                 w = None
                 if satk_b is not None:
-                    w = satk_b[:, tgt_ch:tgt_ch + 1]
+                    chs = tgt_ch if isinstance(tgt_ch, (list, tuple)) else [tgt_ch]
+                    w = satk_b[:, chs].prod(dim=1, keepdim=True)
                 if use_fid and fid_b is not None:
                     w = fid_b if w is None else w * fid_b
                 if w is None:
@@ -320,17 +348,27 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
             l_hh = _wmean((d_out[:, 0:1] - tgt[:, 0:1]).abs(), 0)
             l_vv = _wmean((d_out[:, 3:4] - tgt[:, 3:4]).abs(), 3)
             loss_copol = (l_hh + l_vv) / 2
-            w_r = cfg.merlin_recip_weight
-            l_hv = ((1 - w_r) * _wmean((d_out[:, 1:2] - tgt[:, 1:2]).abs(), 1, True)
-                    + w_r * _wmean((d_out[:, 1:2] - tgt[:, 2:3]).abs(), 2, True))
-            l_vh = ((1 - w_r) * _wmean((d_out[:, 2:3] - tgt[:, 2:3]).abs(), 2, True)
-                    + w_r * _wmean((d_out[:, 2:3] - tgt[:, 1:2]).abs(), 1, True))
+            t_x = tgt[:, 1:3]
+            if cfg.xpol_target_debias > 0:                       # D1
+                db2 = torch.cat([P[pi]["tgt_db2"].expand(1, 2, crop, crop)
+                                 for pi, _, _ in crops], dim=0)
+                t_x = torch.sqrt((t_x ** 2 - db2).clamp(min=0.0))
+            if cfg.xpol_fused_target:                            # D1
+                t_f = 0.5 * (t_x[:, 0:1] + t_x[:, 1:2])
+                l_hv = _wmean((d_out[:, 1:2] - t_f).abs(), [1, 2], True)
+                l_vh = _wmean((d_out[:, 2:3] - t_f).abs(), [1, 2], True)
+            else:
+                w_r = cfg.merlin_recip_weight
+                l_hv = ((1 - w_r) * _wmean((d_out[:, 1:2] - t_x[:, 0:1]).abs(), 1, True)
+                        + w_r * _wmean((d_out[:, 1:2] - t_x[:, 1:2]).abs(), 2, True))
+                l_vh = ((1 - w_r) * _wmean((d_out[:, 2:3] - t_x[:, 1:2]).abs(), 2, True)
+                        + w_r * _wmean((d_out[:, 2:3] - t_x[:, 0:1]).abs(), 1, True))
             loss_xpol = (l_hv + l_vh) / 2
         else:
             ar_b = stack("ar", crops)
             ai_b = stack("ai", crops)
             m = masker(noisy_b)
-            d_out = model(m["masked_input"])
+            d_out = model(m["masked_input"], aux=aux_b)
 
             def masked_loss(pred, tgt_ch, mask):
                 l_amp = crit(pred, noisy_b[:, tgt_ch:tgt_ch + 1], mask)
@@ -375,12 +413,19 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
                 [S_bank[pi][:, :, y:y + crop, x:x + crop]
                  for pi, y, x in crops], dim=0)
             S_pos = torch.nn.functional.softplus(S_crops)
-            l_fact = ((d_out * S_pos - noisy_b) ** 2).mean()
+            sq_f = (d_out * S_pos - noisy_b) ** 2
+            if fact_b is not None:                               # D4
+                sq_f = torch.cat([sq_f[:, 0:1], sq_f[:, 1:3] * fact_b,
+                                  sq_f[:, 3:4]], dim=1)
+            l_fact = sq_f.mean()
             if cfg.hist_lambda > 0:
                 histos, marg = [], 0.0
                 for c in range(4):
                     s_c = torch.clamp(S_pos[:, c], 0.0, cfg.hist_range)
-                    h_c = compute_soft_histogram(s_c, bin_centers_t, hist_step)
+                    h_c = compute_soft_histogram(
+                        s_c, bin_centers_t, hist_step,
+                        weight=fact_b[:, 0] if (fact_b is not None
+                                                and c in (1, 2)) else None)
                     marg = marg + ((h_c - h_ref_t) ** 2).sum()
                     histos.append(h_c)
                 l_hist = (marg / 4.0 + cfg.hist_recip_weight
@@ -426,6 +471,7 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
         infer_inputs = ([d["ri"][0:1], d["ri"][1:2]] if merlin
                         else [d["noisy"]])
         final_model.train()
+        aux_p = d["snr"] if use_aux else None
         with torch.no_grad():
             acc = torch.zeros_like(d["noisy"])
             cnt = 0
@@ -434,10 +480,14 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
                     for k_rot in range(4):
                         for do_flip in (False, True):
                             x_aug = torch.rot90(x_base, k_rot, dims=[-2, -1])
+                            a_aug = (torch.rot90(aux_p, k_rot, dims=[-2, -1])
+                                     if aux_p is not None else None)
                             if do_flip:
                                 x_aug = torch.flip(x_aug, dims=[-1])
+                                if a_aug is not None:
+                                    a_aug = torch.flip(a_aug, dims=[-1])
                             for _ in range(cfg.tta_mc_passes):
-                                out = final_model(x_aug).clamp(0, 1)
+                                out = final_model(x_aug, aux=a_aug).clamp(0, 1)
                                 if do_flip:
                                     out = torch.flip(out, dims=[-1])
                                 acc += torch.rot90(out, -k_rot, dims=[-2, -1])
@@ -445,7 +495,7 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
             else:
                 for x_base in infer_inputs:
                     for _ in range(max(cfg.n_inference // len(infer_inputs), 1)):
-                        acc += final_model(x_base).clamp(0, 1)
+                        acc += final_model(x_base, aux=aux_p).clamp(0, 1)
                         cnt += 1
             acc /= cnt
 
@@ -463,6 +513,10 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
                     prot = torch.maximum(prot, d["det"])
                 if d["edge_full"] is not None:
                     prot = torch.maximum(prot, d["edge_full"])
+                if d["helix"] is not None:                       # D3
+                    prot = prot.expand(-1, 4, -1, -1).clone()
+                    prot[:, 1:3] = torch.maximum(
+                        prot[:, 1:3], cfg.phase_helix_protect * d["helix"])
                 acc = nl_polish(acc, window=cfg.polish_window,
                                 sigma=cfg.polish_sigma, strength=cfg.polish,
                                 protect=prot,

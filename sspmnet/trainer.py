@@ -200,6 +200,38 @@ class TrainConfig:
                                     # difference on dark low-coherence
                                     # pixels); 0 = off
 
+    # Track D — feeding the cross-pol channel with the phase evidence
+    # (docs/plans/track-d-hv-phase-plan.md). All default off.
+    xpol_fused_target: bool = False # D1: MERLIN cross-pol target = the
+                                    # MEAN of the HV and VH opposite-
+                                    # component targets (reciprocity: same
+                                    # signal, independent thermal noise ->
+                                    # averaging the MEASUREMENTS cuts the
+                                    # supervision noise ~-26%; mixing the
+                                    # two L1 LOSSES, merlin_recip_weight,
+                                    # gains nothing)
+    xpol_target_debias: float = 0.0 # D1: thermal debias applied to the
+                                    # cross-pol TARGET (intensity domain,
+                                    # sqrt(max(t^2 - k*sigma_th^2, 0)),
+                                    # sigma_th on the normalized amplitude
+                                    # scale) so the network + regularizers
+                                    # learn the debiased level smoothly —
+                                    # unlike the post-hoc `thermal_debias`
+                                    # this does not amplify floor grain
+    phase_helix_protect: float = 0.0  # D3: cross-pol structure protection
+                                    # from the 'helix' map (co/cross-pol
+                                    # phase coherence = symmetry-breaking
+                                    # man-made targets): TV weights of
+                                    # channels HV/VH x (1 - p*helix) and
+                                    # polish protection max(.., p*helix)
+    fact_snr_gate: float = 0.0      # D4: gate the Rayleigh-assuming terms
+                                    # (speckle factorization + histogram
+                                    # matching) on the cross-pol channels
+                                    # by the phase snr map: per-pixel
+                                    # weight (1-g) + g*snr — on thermal-
+                                    # floor pixels y = x*S + n is not
+                                    # multiplicative, so S is not Rayleigh
+
     # Reporting
     snapshot_every: int = 100
 
@@ -314,6 +346,7 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
     # ── Phase feedback maps: per-pixel noise/structure evidence from the
     #    folded quad-pol phase (see sspmnet.phase_data) ──
     phase_factor = fid_w = nl_w = det_t = nl_sigma_map = None
+    snr_t = helix_t = fact_w = None
     if pha is not None:
         pm = pha if isinstance(pha, dict) else phase_feedback_maps(
             pha=np.asarray(pha, dtype=np.float32), win=cfg.phase_win)
@@ -351,6 +384,40 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                     span_g, alpha=cfg.guide_alpha,
                     cv_protect=cfg.guide_cv_protect or None)
         tv_weights = modulate_edge_weights(tv_weights, phase_factor)
+        if cfg.phase_helix_protect > 0 and "helix" in pm:
+            # D3: protect cross-pol structure only (channels 1, 2) — a
+            # protection map, not a smoothing reduction: flats unchanged
+            helix_t = torch.from_numpy(pm["helix"]).float()[None, None].to(device)
+            keep = 1.0 - cfg.phase_helix_protect * helix_t
+            k_h, k_w = modulate_edge_weights((torch.ones_like(keep[:, :, 1:]),
+                                              torch.ones_like(keep[:, :, :, 1:])),
+                                             keep)
+            w_h, w_w = tv_weights
+            w_h = w_h.expand(-1, 4, -1, -1).clone()
+            w_w = w_w.expand(-1, 4, -1, -1).clone()
+            w_h[:, 1:3] = w_h[:, 1:3] * k_h
+            w_w[:, 1:3] = w_w[:, 1:3] * k_w
+            tv_weights = (w_h, w_w)
+        if cfg.fact_snr_gate > 0:
+            # D4: per-pixel weight for the Rayleigh-assuming terms on the
+            # cross-pol channels (1 on signal, ->1-g on the thermal floor)
+            fact_w = (1.0 - cfg.fact_snr_gate) + cfg.fact_snr_gate * snr_t
+
+    # D2: the snr map as an extra input plane of the cross-pol branch
+    aux_in = snr_t if (cfg.model_cfg or {}).get("xpol_snr_input") else None
+
+    # D1: cross-pol target debias level on the normalized amplitude scale
+    tgt_db2 = None
+    if cfg.xpol_target_debias > 0 and ri_pair is not None:
+        from .complex_data import estimate_thermal_sigma
+        s_th_raw = estimate_thermal_sigma(
+            amp_4ch_raw, pm["snr"] if pha is not None else None)
+        s_th_n = torch.from_numpy(
+            (s_th_raw / q99[1:3, 0, 0]).astype(np.float32)).to(device)
+        tgt_db2 = cfg.xpol_target_debias * (s_th_n ** 2).view(1, 2, 1, 1)
+        if verbose:
+            print(f"  [target-debias] sigma_th={s_th_raw:.2f} "
+                  f"k={cfg.xpol_target_debias}")
 
     nl_ref0 = nl_ref            # initial (static) non-local reference
 
@@ -425,7 +492,7 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             # In MERLIN mode the network sees component inputs, so warm up
             # on them too (alternating), not on the amplitude.
             x_pw = ri_t[i_pw % 2:i_pw % 2 + 1] if merlin else noisy_t
-            loss_pw = ((model(x_pw) - warmup_t) ** 2).mean()
+            loss_pw = ((model(x_pw, aux=aux_in) - warmup_t) ** 2).mean()
             opt_pw.zero_grad()
             loss_pw.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -463,6 +530,14 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             ri_msg += (f" PH(b={cfg.phase_smooth_boost},"
                        f"s={cfg.phase_surface_boost},p={cfg.phase_protect},"
                        f"f={cfg.phase_fidelity})")
+        if (cfg.xpol_fused_target or cfg.xpol_target_debias > 0
+                or cfg.phase_helix_protect > 0 or cfg.fact_snr_gate > 0
+                or aux_in is not None):
+            ri_msg += (f" D(fused={cfg.xpol_fused_target},"
+                       f"tdb={cfg.xpol_target_debias},"
+                       f"snr_in={aux_in is not None},"
+                       f"helix={cfg.phase_helix_protect},"
+                       f"gate={cfg.fact_snr_gate})")
         if cfg.nl_self_refresh > 0 or cfg.polish > 0 or cfg.whiteness_lambda > 0:
             if cfg.edge_sharp_lambda > 0 or cfg.edge_boost > 0:
                 ri_msg += (f" EDGE(l={cfg.edge_sharp_lambda},"
@@ -487,7 +562,7 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             #    pixel supervises (no masking needed). ──
             k = step % 2
             x_in, tgt = ri_t[k:k + 1], ri_t[1 - k:2 - k]
-            d = model(x_in)
+            d = model(x_in, aux=aux_in)
 
             if cfg.merlin_loss == "nll":
                 # Gaussian NLL of the raw component c ~ N(0, A^2/2) given
@@ -521,7 +596,8 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 def _wmean(t, tgt_ch, use_fid=False):
                     w = None
                     if sat_keep is not None:
-                        w = sat_keep[:, tgt_ch:tgt_ch + 1]
+                        chs = tgt_ch if isinstance(tgt_ch, (list, tuple)) else [tgt_ch]
+                        w = sat_keep[:, chs].prod(dim=1, keepdim=True)
                     if use_fid and fid_w is not None:
                         w = fid_w if w is None else w * fid_w
                     if w is None:
@@ -533,20 +609,35 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 l_vv = _wmean((d[:, 3:4] - tgt[:, 3:4]).abs(), 3)
                 loss_copol = (l_hh + l_vv) / 2
 
-                # Cross-pol: opposite component of own channel +
-                # (reciprocity) of the reciprocal channel — both
-                # independent of the input. With phase feedback, pixels
-                # whose observation is noise-dominated (low HV-VH phase
-                # coherence) contribute less to the data term.
-                w_r = cfg.merlin_recip_weight
-                l_hv = ((1 - w_r) * _wmean((d[:, 1:2] - tgt[:, 1:2]).abs(), 1, True)
-                        + w_r * _wmean((d[:, 1:2] - tgt[:, 2:3]).abs(), 2, True))
-                l_vh = ((1 - w_r) * _wmean((d[:, 2:3] - tgt[:, 2:3]).abs(), 2, True)
-                        + w_r * _wmean((d[:, 2:3] - tgt[:, 1:2]).abs(), 1, True))
+                # Cross-pol targets (opposite component; independent of
+                # the input). D1: optionally debias them in the intensity
+                # domain — E[|z|^2] = I + P_thermal biases the dark floor
+                # up; the debiased target is a censored (>= 0) but far
+                # less biased observation of the reflectivity.
+                t_x = tgt[:, 1:3]
+                if tgt_db2 is not None:
+                    t_x = torch.sqrt((t_x ** 2 - tgt_db2).clamp(min=0.0))
+                if cfg.xpol_fused_target:
+                    # D1: reciprocity -> HV and VH targets observe the SAME
+                    # signal with independent thermal noise; their MEAN is
+                    # a lower-noise measurement (not a loss mixture).
+                    t_f = 0.5 * (t_x[:, 0:1] + t_x[:, 1:2])
+                    l_hv = _wmean((d[:, 1:2] - t_f).abs(), [1, 2], True)
+                    l_vh = _wmean((d[:, 2:3] - t_f).abs(), [1, 2], True)
+                else:
+                    # own channel + (reciprocity) the reciprocal channel,
+                    # mixed at the LOSS level. With phase feedback, pixels
+                    # whose observation is noise-dominated (low HV-VH
+                    # phase coherence) contribute less to the data term.
+                    w_r = cfg.merlin_recip_weight
+                    l_hv = ((1 - w_r) * _wmean((d[:, 1:2] - t_x[:, 0:1]).abs(), 1, True)
+                            + w_r * _wmean((d[:, 1:2] - t_x[:, 1:2]).abs(), 2, True))
+                    l_vh = ((1 - w_r) * _wmean((d[:, 2:3] - t_x[:, 1:2]).abs(), 2, True)
+                            + w_r * _wmean((d[:, 2:3] - t_x[:, 0:1]).abs(), 1, True))
                 loss_xpol = (l_hv + l_vh) / 2
         else:
             m = masker(noisy_t)
-            d = model(m["masked_input"])
+            d = model(m["masked_input"], aux=aux_in)
 
             def masked_loss(pred, tgt_ch, mask):
                 """Masked L1 vs. the amplitude target of channel ``tgt_ch``;
@@ -595,12 +686,19 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         # Speckle factorization + histogram matching
         if cfg.use_speckle_factor and S_real is not None:
             S_pos = torch.nn.functional.softplus(S_real)
-            l_fact = ((d * S_pos - noisy_t) ** 2).mean()
+            sq_f = (d * S_pos - noisy_t) ** 2
+            if fact_w is not None:                  # D4: gate xpol floor
+                sq_f = torch.cat([sq_f[:, 0:1], sq_f[:, 1:3] * fact_w,
+                                  sq_f[:, 3:4]], dim=1)
+            l_fact = sq_f.mean()
             if cfg.hist_lambda > 0:
                 histos, marg = [], 0.0
                 for c in range(4):
                     s_c = torch.clamp(S_pos[:, c], 0.0, cfg.hist_range)
-                    h_c = compute_soft_histogram(s_c, bin_centers_t, hist_step)
+                    h_c = compute_soft_histogram(
+                        s_c, bin_centers_t, hist_step,
+                        weight=fact_w[:, 0] if (fact_w is not None
+                                                and c in (1, 2)) else None)
                     marg = marg + ((h_c - h_ref_t) ** 2).sum()
                     histos.append(h_c)
                 l_hist = marg / 4.0 + cfg.hist_recip_weight * ((histos[1] - histos[2]) ** 2).sum()
@@ -646,7 +744,7 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             with torch.no_grad():
                 pred = torch.zeros_like(noisy_t)
                 for x_base in infer_inputs:
-                    pred += ref_model(x_base).clamp(0, 1)
+                    pred += ref_model(x_base, aux=aux_in).clamp(0, 1)
                 pred /= len(infer_inputs)
             if was_training:
                 ref_model.train()
@@ -662,7 +760,7 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 n_pass = 8 // len(infer_inputs)
                 for x_base in infer_inputs:
                     for _ in range(n_pass):
-                        acc += inf_model(x_base).clamp(0, 1)
+                        acc += inf_model(x_base, aux=aux_in).clamp(0, 1)
                 acc /= n_pass * len(infer_inputs)
             d_np = acc[0].cpu().numpy()
 
@@ -685,10 +783,15 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                     for k_rot in range(4):
                         for do_flip in (False, True):
                             x_aug = torch.rot90(x_base, k_rot, dims=[-2, -1])
+                            a_aug = None
+                            if aux_in is not None:
+                                a_aug = torch.rot90(aux_in, k_rot, dims=[-2, -1])
                             if do_flip:
                                 x_aug = torch.flip(x_aug, dims=[-1])
+                                if a_aug is not None:
+                                    a_aug = torch.flip(a_aug, dims=[-1])
                             for _ in range(cfg.tta_mc_passes):
-                                out = final_model(x_aug).clamp(0, 1)
+                                out = final_model(x_aug, aux=a_aug).clamp(0, 1)
                                 if do_flip:
                                     out = torch.flip(out, dims=[-1])
                                 out = torch.rot90(out, -k_rot, dims=[-2, -1])
@@ -697,7 +800,7 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 return acc_f / cnt
             for x_base in infer_inputs:
                 for _ in range(max(cfg.n_inference // len(infer_inputs), 1)):
-                    acc_f += final_model(x_base).clamp(0, 1)
+                    acc_f += final_model(x_base, aux=aux_in).clamp(0, 1)
                     cnt += 1
             return acc_f / cnt
 
@@ -719,6 +822,10 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 prot = torch.maximum(prot, det_t)
             if edge_full is not None:
                 prot = torch.maximum(prot, edge_full)
+            if helix_t is not None:                  # D3: xpol channels only
+                prot = prot.expand(-1, 4, -1, -1).clone()
+                prot[:, 1:3] = torch.maximum(
+                    prot[:, 1:3], cfg.phase_helix_protect * helix_t)
             acc = nl_polish(acc, window=cfg.polish_window,
                             sigma=cfg.polish_sigma, strength=cfg.polish,
                             protect=prot,

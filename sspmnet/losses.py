@@ -340,12 +340,22 @@ def compute_reference_histogram(looks: int, n_bins: int, range_max: float,
             torch.from_numpy(bin_centers).float().to(device), step)
 
 
-def compute_soft_histogram(values_2d, bin_centers, step):
-    """Differentiable soft histogram (triangular kernel) of ``values_2d``."""
+def compute_soft_histogram(values_2d, bin_centers, step, weight=None):
+    """Differentiable soft histogram (triangular kernel) of ``values_2d``.
+
+    ``weight`` (same shape as ``values_2d``, in [0, 1]) is an optional
+    per-sample weight: pixels with weight 0 do not contribute — e.g. the
+    thermal-noise-floor pixels of a cross-pol channel, whose speckle
+    factor is NOT Rayleigh (the additive noise breaks the multiplicative
+    model), are kept out of the Rayleigh matching.
+    """
     K = bin_centers.shape[0]
     bc = bin_centers.view(K, 1, 1, 1)
     v = values_2d.unsqueeze(0)
     delta = torch.clamp(1.0 - torch.abs(v - bc) / step, min=0.0)
+    if weight is not None:
+        delta = delta * weight.unsqueeze(0)
+        return delta.sum(dim=(1, 2, 3)) / weight.sum().clamp(min=1.0)
     counts = delta.sum(dim=(1, 2, 3))
     n_total = values_2d.shape[-2] * values_2d.shape[-1] * values_2d.shape[-3]
     return counts / max(n_total, 1)

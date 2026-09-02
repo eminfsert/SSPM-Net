@@ -65,6 +65,13 @@ class Config:
     # measured twice with independent thermal noise, so the second plane
     # is a genuine extra look the branch can fuse spatially.
     xpol_pair_input: bool = False
+    # When True the cross-pol branch additionally receives the phase
+    # reciprocity-coherence ('snr') map as an input plane (last), so the
+    # network itself can see where the observation is thermal-noise
+    # dominated instead of relying on hand-set loss weights alone. The map
+    # is passed as ``SSPMNet.forward(x, aux=...)``; a zero plane is used
+    # when none is given.
+    xpol_snr_input: bool = False
 
     # ── Device ───────────────────────────────────────────────────────
     device: str = "auto"

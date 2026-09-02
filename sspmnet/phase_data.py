@@ -29,6 +29,15 @@ feedback maps are built with local circular statistics:
       normalization); excess LOCAL spatial coherence marks deterministic
       / point scatterers whose edges must be protected.
 
+  helix (co-pol / cross-pol phase coherence)
+      For reflection-symmetric (natural, distributed) media the co-pol and
+      cross-pol channels are uncorrelated, so the local concentration of
+      exp(2j*(phi_HH - phi_HV)) sits at the estimator's random-phase floor
+      (~0.13 for a 7x7 window). Man-made / helical scatterers break the
+      symmetry and light the map up (0.34 on the bright 10% of the real
+      patch) — a cross-pol-specific structure detector, stronger than
+      ``det`` (which is near its noise floor on this data).
+
 Each map is normalized per scene to [0, 1] with robust percentiles, which
 also removes the estimator's noise floor and the oversampling baseline.
 """
@@ -105,6 +114,8 @@ def phase_feedback_maps(pha: np.ndarray = None, win: int = 7,
         'snr'     — HV-VH reciprocity coherence (high = signal-dominated)
         'surface' — HH-VV co-pol coherence      (high = surface scattering)
         'det'     — spatial phase coherence     (high = deterministic target)
+        'helix'   — co/cross-pol phase coherence (high = symmetry-breaking,
+                    man-made structure; cross-pol structure protection)
     """
     if pha is None:
         if z is None:
@@ -115,9 +126,15 @@ def phase_feedback_maps(pha: np.ndarray = None, win: int = 7,
     snr = _local_coherence(u[1] * np.conj(u[2]), win)
     surface = _local_coherence(u[0] * np.conj(u[3]), win)
     det = np.mean([_local_coherence(u[c], win) for c in range(4)], axis=0)
+    helix = 0.5 * (_local_coherence(u[0] * np.conj(u[1]), win)
+                   + _local_coherence(u[0] * np.conj(u[2]), win))
 
     if smooth and smooth > 1:
-        snr, surface, det = (_local_mean(g, smooth) for g in (snr, surface, det))
+        snr, surface, det, helix = (
+            _local_mean(g, smooth) for g in (snr, surface, det, helix))
     return {"snr": _robust_norm(snr),
             "surface": _robust_norm(surface),
-            "det": _robust_norm(det)}
+            "det": _robust_norm(det),
+            # the random-phase floor is well above the 20th percentile on
+            # a mostly-natural scene, so the robust norm removes it
+            "helix": _robust_norm(helix, q_lo=0.5, q_hi=0.99)}

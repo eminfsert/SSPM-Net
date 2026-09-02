@@ -34,7 +34,7 @@ from .losses import (
     nl_polish, ratio_whiteness_loss, edge_fidelity_loss,
 )
 from .phase_data import phase_feedback_maps
-from .complex_data import _L1_RATIO
+from .complex_data import _L1_RATIO, _HN_MED_OVER_MEAN
 
 
 @dataclass
@@ -210,6 +210,17 @@ class TrainConfig:
                                     # supervision noise ~-26%; mixing the
                                     # two L1 LOSSES, merlin_recip_weight,
                                     # gains nothing)
+    xpol_fused_loss: str = "l1"     # D1: loss on the fused target. "l1" is
+                                    # median-seeking, but the median of the
+                                    # MEAN of two targets depends on how
+                                    # correlated they are (shared speckle
+                                    # on bright pixels, independent thermal
+                                    # noise on dark ones) -> a spatially
+                                    # varying scale shift. "l2" fits the
+                                    # mean, which is correlation-
+                                    # independent; the target is pre-scaled
+                                    # by the half-normal median/mean ratio
+                                    # so the output stays on the L1 scale
     xpol_target_debias: float = 0.0 # D1: thermal debias applied to the
                                     # cross-pol TARGET (intensity domain,
                                     # sqrt(max(t^2 - k*sigma_th^2, 0)),
@@ -533,7 +544,7 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         if (cfg.xpol_fused_target or cfg.xpol_target_debias > 0
                 or cfg.phase_helix_protect > 0 or cfg.fact_snr_gate > 0
                 or aux_in is not None):
-            ri_msg += (f" D(fused={cfg.xpol_fused_target},"
+            ri_msg += (f" D(fused={cfg.xpol_fused_target}/{cfg.xpol_fused_loss},"
                        f"tdb={cfg.xpol_target_debias},"
                        f"snr_in={aux_in is not None},"
                        f"helix={cfg.phase_helix_protect},"
@@ -622,8 +633,13 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                     # signal with independent thermal noise; their MEAN is
                     # a lower-noise measurement (not a loss mixture).
                     t_f = 0.5 * (t_x[:, 0:1] + t_x[:, 1:2])
-                    l_hv = _wmean((d[:, 1:2] - t_f).abs(), [1, 2], True)
-                    l_vh = _wmean((d[:, 2:3] - t_f).abs(), [1, 2], True)
+                    if cfg.xpol_fused_loss == "l2":
+                        t_f = t_f * _HN_MED_OVER_MEAN
+                        l_hv = _wmean((d[:, 1:2] - t_f) ** 2, [1, 2], True)
+                        l_vh = _wmean((d[:, 2:3] - t_f) ** 2, [1, 2], True)
+                    else:
+                        l_hv = _wmean((d[:, 1:2] - t_f).abs(), [1, 2], True)
+                        l_vh = _wmean((d[:, 2:3] - t_f).abs(), [1, 2], True)
                 else:
                     # own channel + (reciprocity) the reciprocal channel,
                     # mixed at the LOSS level. With phase feedback, pixels

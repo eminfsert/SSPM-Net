@@ -8,6 +8,8 @@ Variants (full recommended stack, tv_mult=10, each knob on top of the base):
                 targets instead of a loss mixture)
   D1f+tdb.5   : + xpol_target_debias 0.5   (target-domain thermal debias)
   D1f+tdb1    : + xpol_target_debias 1.0
+  D1f-l2      : xpol_fused_loss="l2" (mean-seeking fit of the fused
+                target, pre-scaled to the L1 convention) (+tdb.5 variant)
   D2          : model_cfg xpol_snr_input (phase snr map as network input)
   D3          : phase_helix_protect 0.5 (xpol structure protection)
   D4          : fact_snr_gate 1.0 (Rayleigh terms gated on the floor)
@@ -141,6 +143,13 @@ VARIANTS = [
     ("D2",         "hvp_{p}_d2", {}, {**BASE_M, "xpol_snr_input": True}),
     ("D3",         "hvp_{p}_d3", {"phase_helix_protect": 0.5}, BASE_M),
     ("D4",         "hvp_{p}_d4", {"fact_snr_gate": 1.0}, BASE_M),
+    # D1 with an L2 (mean-seeking) fit of the fused target: the L1 median
+    # of the fused target shifts with the HV-VH correlation (bright: shared
+    # speckle; dark: independent thermal noise) — seen as a dark-area
+    # brightening in the first D1f run
+    ("D1f-l2",     "hvp_{p}_d1f_l2", {**D1, "xpol_fused_loss": "l2"}, BASE_M),
+    ("D1f-l2+tdb.5", "hvp_{p}_d1f_l2_tdb05",
+     {**D1, "xpol_fused_loss": "l2", "xpol_target_debias": 0.5}, BASE_M),
 ]
 # combination rows (edit after reading the single-knob rows; kept explicit
 # so the cache tags stay stable)

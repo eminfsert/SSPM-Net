@@ -38,6 +38,7 @@ from .losses import (
 )
 from .phase_data import phase_feedback_maps
 from .trainer import TrainConfig, _resolve_device
+from .complex_data import _HN_MED_OVER_MEAN
 
 
 def _prep_patch(entry, q99, cfg, device):
@@ -355,8 +356,13 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
                 t_x = torch.sqrt((t_x ** 2 - db2).clamp(min=0.0))
             if cfg.xpol_fused_target:                            # D1
                 t_f = 0.5 * (t_x[:, 0:1] + t_x[:, 1:2])
-                l_hv = _wmean((d_out[:, 1:2] - t_f).abs(), [1, 2], True)
-                l_vh = _wmean((d_out[:, 2:3] - t_f).abs(), [1, 2], True)
+                if cfg.xpol_fused_loss == "l2":
+                    t_f = t_f * _HN_MED_OVER_MEAN
+                    l_hv = _wmean((d_out[:, 1:2] - t_f) ** 2, [1, 2], True)
+                    l_vh = _wmean((d_out[:, 2:3] - t_f) ** 2, [1, 2], True)
+                else:
+                    l_hv = _wmean((d_out[:, 1:2] - t_f).abs(), [1, 2], True)
+                    l_vh = _wmean((d_out[:, 2:3] - t_f).abs(), [1, 2], True)
             else:
                 w_r = cfg.merlin_recip_weight
                 l_hv = ((1 - w_r) * _wmean((d_out[:, 1:2] - t_x[:, 0:1]).abs(), 1, True)

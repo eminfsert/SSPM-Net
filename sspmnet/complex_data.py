@@ -55,6 +55,11 @@ def _read_tiff(path: str) -> np.ndarray:
 # Gaussian z (the sigma of the scene cancels): 1.1774 / 0.6745
 _L1_RATIO = float(np.sqrt(2.0 * np.log(2.0)) / 0.6744897501960817)
 
+# Median over mean of a half-normal variable (0.6745 / 0.7979): converts a
+# MEAN-seeking (L2) fit of the |Re|/|Im| pseudo-amplitude targets back onto
+# the median (L1) convention the rest of the pipeline uses.
+_HN_MED_OVER_MEAN = float(0.6744897501960817 / np.sqrt(2.0 / np.pi))
+
 
 def calibrate_ri(amp: np.ndarray, re_abs: np.ndarray, im_abs: np.ndarray,
                  mode: str = "l1") -> np.ndarray:

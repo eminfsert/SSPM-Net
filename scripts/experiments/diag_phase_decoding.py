@@ -43,6 +43,17 @@ def slc(pol):
     return _read(pol, "amp") * np.exp(1j * _read(pol, "pha") / 255.0 * 2 * np.pi)
 
 
+def align(x, y):
+    """Remove the constant inter-channel phase offset before combining.
+
+    HV and VH carry a fixed +140.25 deg relative phase on this product (the
+    per-file uint8 phase encoding and/or the system calibration). Combining
+    them without removing it is destructive interference, not fusion.
+    """
+    off = np.angle((x * np.conj(y)).sum())
+    return y * np.exp(1j * off), off
+
+
 def coherence(x, y, win=7):
     num = (uniform_filter(np.real(x * np.conj(y)), win)
            + 1j * uniform_filter(np.imag(x * np.conj(y)), win))
@@ -114,22 +125,54 @@ def physics_test():
 
 
 def payoff_test():
-    print("\n== 5. Payoff: coherent vs incoherent cross-pol combination ==")
+    """Coherent vs incoherent cross-pol combination — a NEGATIVE result.
+
+    Reciprocity means HV and VH are largely the SAME complex sample (global
+    coherence 0.83 after offset removal), so their SPECKLE is shared.
+    Coherent averaging can only average the INDEPENDENT thermal part
+    (-12% intensity in thermal-dominated areas) and therefore does not beat
+    plain intensity averaging on ENL. The naive no-offset version scores a
+    spuriously high ENL purely through destructive interference (its mean
+    collapses to 0.44x) -- an artefact, not a gain.
+    """
+    print("\n== 5. Coherent vs incoherent cross-pol combination (NEGATIVE) ==")
     Shv, Svh = slc("hv"), slc("vh")
-    Ihv = np.abs(Shv) ** 2
+    Svh_a, off = align(Shv, Svh)
+    print(f"   constant HV-VH phase offset removed: {np.degrees(off):+.2f} deg")
     variants = {
-        "HV alone": Ihv,
-        "VH alone": np.abs(Svh) ** 2,
+        "HV alone": np.abs(Shv) ** 2,
         "incoherent amp avg (current)": ((np.abs(Shv) + np.abs(Svh)) / 2) ** 2,
-        "intensity avg": (Ihv + np.abs(Svh) ** 2) / 2,
-        "COHERENT avg (uses phase)": np.abs((Shv + Svh) / 2) ** 2,
+        "intensity avg": (np.abs(Shv) ** 2 + np.abs(Svh) ** 2) / 2,
+        "coherent NAIVE (offset left in)": np.abs((Shv + Svh) / 2) ** 2,
+        "coherent ALIGNED": np.abs((Shv + Svh_a) / 2) ** 2,
     }
-    dark = Ihv < np.percentile(Ihv, 20)
     span = uniform_filter(np.abs(slc("hh")) ** 2 + np.abs(slc("vv")) ** 2, 9)
-    print(f"   {'variant':<30} {'ENL':>7} {'darkMean':>10} {'corrSpan':>9}")
+    dark = span < np.percentile(span, 20)          # fair, HV-independent mask
+    print(f"   {'variant':<34} {'ENL':>7} {'mean':>8} {'darkI':>9} {'corrSpan':>9}")
     for name, X in variants.items():
         c = np.corrcoef(uniform_filter(X, 3).ravel(), span.ravel())[0, 1]
-        print(f"   {name:<30} {enl(X):>7.3f} {X[dark].mean():>10.1f} {c:>9.4f}")
+        print(f"   {name:<34} {enl(X):>7.3f} {np.sqrt(X).mean():>8.2f} "
+              f"{X[dark].mean():>9.1f} {c:>9.4f}")
+    print("   -> aligned coherent fusion LOSES to intensity averaging: shared")
+    print("      speckle cannot be averaged away. Only the thermal floor drops.")
+
+
+def snr_map_test():
+    """The correct single-angle coherence map vs the old doubled-angle one."""
+    print("\n== 6. Per-pixel SNR map: single angle vs doubled angle ==")
+    Shv, Svh = slc("hv"), slc("vh")
+    Svh_a, _ = align(Shv, Svh)
+    single = coherence(Shv, Svh_a)
+    dbl = coherence(np.abs(Shv) * np.exp(2j * np.angle(Shv)),
+                    np.abs(Svh) * np.exp(2j * np.angle(Svh)))
+    span = uniform_filter(np.abs(slc("hh")) ** 2 + np.abs(slc("vv")) ** 2, 9)
+    dark = span < np.percentile(span, 20)
+    bright = np.abs(Shv) ** 2 > np.percentile(np.abs(Shv) ** 2, 90)
+    for name, m in (("single (correct)", single), ("doubled (old)", dbl)):
+        print(f"   {name:<18} mean={m.mean():.4f}  bright10%={m[bright].mean():.4f}"
+              f"  dark20%={m[dark].mean():.4f}  contrast={m[bright].mean()/m[dark].mean():.2f}")
+    print("   -> single-angle is less noisy (higher mean) but NOT a better")
+    print("      discriminator (lower bright/dark contrast). No free win here.")
 
 
 if __name__ == "__main__":
@@ -138,5 +181,12 @@ if __name__ == "__main__":
     reconstruction_test()
     physics_test()
     payoff_test()
-    print("\nVERDICT: pha = full-range [0,2pi) SLC phase. The complex data is "
-          "recoverable; the 'phase is destroyed' conclusion was a decoding bug.")
+    snr_map_test()
+    print("\nVERDICT: pha = full-range [0,2pi) SLC phase (corr 0.996 "
+          "reconstruction, uniform quadrants). The complex data IS recoverable "
+          "and the 'phase is destroyed' conclusion was a decoding bug.")
+    print("HOWEVER: the obvious payoff does NOT materialise. HV/VH are ~0.83 "
+          "coherent (the same physical sample), so coherent fusion cannot "
+          "average speckle away, and the corrected SNR map is no better a "
+          "discriminator than the old doubled-angle one. The value of the fix "
+          "is that it unlocks the C3/T3 covariance route, not a quick win.")

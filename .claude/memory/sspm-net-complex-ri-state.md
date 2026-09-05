@@ -82,18 +82,24 @@ MEVCUT; (3) amp+phi'den |Re|,|Im| yeniden kurulumu **corr 0.996**; (4) fizik: HV
 koherans **0.772** (rastgele-faz null 0.185; eski cift-aci rotasi 0.639 -> tek aci DAHA IYI, cunku aci
 katlamak faz gurultusunu de katliyor), HH-VV 0.348, uzamsal lag-1 0.698 -> lag2 0.321 (gercek SAR
 oversampling imzasi).
-**ACILAN YOL:** kompleks SLC artik elde: `S = amp * exp(1j*phi)`. Koherent HV+VH birlestirme olculdu:
-ENL 0.602 (bugunku inkoherent amp ortalamasi) -> **0.686 koherent (+%14)**, karanlik-alan ortalamasi
-449 -> 320 (**-%29 termal gurultu, bedava** -- `thermal_debias` knob'unun elle yapmaya calistigi sey,
-fizikten geliyor). corrSpan 0.669 -> 0.639 dustu, incelenecek. Bunun otesinde: gercek koherent MERLIN,
-C3/T3 kovaryans yolu, isaretli HH-VV CPD -- hepsi "gelecek calisma / imzali float SLC lazim" diye
-kapatilmisti, artik MEVCUT VERIYLE acik.
+**DUZELTME (ayni gun, olcum sonrasi) — KOLAY KAZANC YOK.** Ilk yazdigim "koherent HV+VH ile ENL +%14,
+termal -%29" iddiasi YANLISTI: HV-VH arasinda sabit **+140.25 derece** faz ofseti var; ofset kaldirilmadan
+toplamak yikici girisim (ortalama 0.44x'e cokuyor) ve ENL'yi yapay olarak sisiriyor. Ofset dogru kaldirilinca
+global HV-VH koherans **0.83** -> resiprosite geregi iki kanal buyuk olcude AYNI kompleks ornek, yani
+speckle'lari ORTAK; koherent ortalama speckle'i azaltamaz. Hizalanmis koherent fuzyon ENL **0.564** =
+duz yogunluk ortalamasindan (0.650) ve bugunku inkoherent amp ortalamasindan (0.602) DAHA KOTU. Tek gercek
+etki bagimsiz termal tabanda (-%12, termal-baskin alanlarda). Duzeltilmis tek-aci SNR haritasi eski cift-aci
+haritasindan daha az gurultulu (ortalama 0.772 vs 0.639) ama daha KOTU ayirt edici (parlak/karanlik kontrast
+1.55 vs 1.75). Isaretli HH-VV CPD bu kentsel yamada null'una yakin (konsantrasyon 0.084). Cozme duzeltmesinin
+degeri hizli kazanc DEGIL: C3/T3 kovaryans yolunu ve gercek koherent yontemleri mevcut veriyle MUMKUN kilmasi,
+ve onceki tum faz sonuclarinin yanlis bir on kabule dayandigini gostermesi.
 **ETKISI:** Track C/D'nin faz knob'lari (`phase_smooth_boost`, `phase_fidelity`, `phase_protect`,
 `phase_surface_boost`, `phase_helix_protect`, `fact_snr_gate`, D2 `xpol_snr_input`) hepsi 2*phi katlanmis
 haritalar uzerine kuruluydu = bilgi kaybi. Bunlarin negatif/marjinal cikmasi artik aciklanabilir.
 **Modele faz girdi olarak VERILMIYOR** (kod: `Config.xpol_snr_input=False` config.py:74; trainer.py:418
 `aux_in=None`; model.py forward aux'u yalnizca bayrak acikken concat ediyor). Faz sadece kayip agirligi
 (`phase_smooth_boost=1.5`, `phase_fidelity=0.5`, `pha=` gecilirse).
-**SIRADAKI IS DEGISTI: Track F (koherent SLC) > Track E.** Track E (log-domain, 8-bit kirpma -1.7 dB)
-hala gecerli ve bagimsiz, ama koherent yol daha buyuk ve daha ucuz gorunuyor. Track E'nin "imzali float
-SLC kullanicidan istenecek" maddesi DUSTU -- veri zaten elimizde.
+**YON:** Track F daraltildi -- ucuz koherent kazanclar olculdu ve NEGATIF; geriye C3/T3 kovaryans yolu
+kaliyor, o da gercek ama buyuk bir is. Track E (log-domain, olculmus -1.7 dB kirpma maliyeti) gecerli,
+bagimsiz ve OLCULMUS headroom'u daha buyuk. Track E'nin "imzali float SLC kullanicidan istenecek" maddesi
+her halukarda DUSTU -- kompleks veri zaten elimizde.

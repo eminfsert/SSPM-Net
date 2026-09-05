@@ -48,14 +48,25 @@ Evidence — `scripts/experiments/diag_phase_decoding.py`, table
   the angle also doubles the phase noise), HH–VV 0.348, spatial lag-1 0.698
   decaying to 0.321 at lag 2 (the real SAR oversampling signature).
 
-**What this opens (measured):** coherent HV+VH combination gives ENL
-0.602 (today's incoherent amplitude average) -> **0.686 (+14%)** and drops the
-dark/thermal-dominated mean 449 -> 320 (**−29% thermal noise, for free** — the
-physical version of what the `thermal_debias` knob tries to do by hand).
-`corrSpan` dips 0.669 -> 0.639, to be investigated. Beyond that: true coherent
-MERLIN, the C3/T3 covariance route and signed HH–VV CPD — all previously
-written off as "future work, needs signed float SLC" — are available with the
-data already in the repo.
+**What this does and does NOT buy (measured, corrected 2026-09-05):** the
+obvious payoff does NOT materialise, and an earlier claim in this file that it
+did was wrong. HV and VH carry a constant **+140.25 deg** relative phase
+offset; combining them without removing it is destructive interference (the
+mean collapses to 0.44x), which inflates ENL as an artefact — that artefact is
+what the first version of this note reported as "+14% ENL, -29% thermal". With
+the offset properly removed, HV-VH global coherence is **0.83**: reciprocity
+means the two channels are largely the SAME complex sample, so their speckle is
+*shared* and coherent averaging cannot reduce it. Aligned coherent fusion gives
+ENL **0.564** — worse than plain intensity averaging (**0.650**) and worse than
+today's incoherent amplitude average (0.602). The only real effect is on the
+independent thermal floor (-12% intensity in thermal-dominated areas). The
+corrected single-angle SNR map is less noisy than the old doubled-angle one
+(mean 0.772 vs 0.639) but a *worse* discriminator (bright/dark contrast 1.55 vs
+1.75), and the signed HH-VV CPD is near its null on this urban patch
+(concentration 0.084). **There is no quick win here.** The value of the fix is
+that the C3/T3 covariance route and genuinely coherent methods are now
+*possible* on the existing data, and that every prior phase conclusion rested
+on a false premise.
 
 **Consequence for the record below:** every phase knob in Tracks C and D
 (`phase_smooth_boost`, `phase_fidelity`, `phase_protect`,

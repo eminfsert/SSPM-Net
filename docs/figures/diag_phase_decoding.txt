@@ -24,12 +24,22 @@
    HV-VH random-phase NULL          : 0.1845
    spatial (oversampling) HH lag-k  : lag1=0.698  lag2=0.321  lag3=0.254
 
-== 5. Payoff: coherent vs incoherent cross-pol combination ==
-   variant                            ENL   darkMean  corrSpan
-   HV alone                         0.567       87.3    0.6666
-   VH alone                         0.570     1322.0    0.6634
-   incoherent amp avg (current)     0.602      449.1    0.6686
-   intensity avg                    0.650      704.6    0.6723
-   COHERENT avg (uses phase)        0.686      320.4    0.6388
+== 5. Coherent vs incoherent cross-pol combination (NEGATIVE) ==
+   constant HV-VH phase offset removed: +140.25 deg
+   variant                                ENL     mean     darkI  corrSpan
+   HV alone                             0.567    81.78    1869.0    0.6666
+   incoherent amp avg (current)         0.602    81.86    1722.9    0.6686
+   intensity avg                        0.650    84.91    1880.5    0.6723
+   coherent NAIVE (offset left in)      0.686    36.19     426.1    0.6388
+   coherent ALIGNED                     0.564    78.63    1597.1    0.6585
+   -> aligned coherent fusion LOSES to intensity averaging: shared
+      speckle cannot be averaged away. Only the thermal floor drops.
 
-VERDICT: pha = full-range [0,2pi) SLC phase. The complex data is recoverable; the 'phase is destroyed' conclusion was a decoding bug.
+== 6. Per-pixel SNR map: single angle vs doubled angle ==
+   single (correct)   mean=0.7724  bright10%=0.8551  dark20%=0.5529  contrast=1.55
+   doubled (old)      mean=0.6392  bright10%=0.7212  dark20%=0.4128  contrast=1.75
+   -> single-angle is less noisy (higher mean) but NOT a better
+      discriminator (lower bright/dark contrast). No free win here.
+
+VERDICT: pha = full-range [0,2pi) SLC phase (corr 0.996 reconstruction, uniform quadrants). The complex data IS recoverable and the 'phase is destroyed' conclusion was a decoding bug.
+HOWEVER: the obvious payoff does NOT materialise. HV/VH are ~0.83 coherent (the same physical sample), so coherent fusion cannot average speckle away, and the corrected SNR map is no better a discriminator than the old doubled-angle one. The value of the fix is that it unlocks the C3/T3 covariance route, not a quick win.

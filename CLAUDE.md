@@ -88,6 +88,59 @@ real but substantial work. Track E stays the larger *measured* headroom and is
 what was run next (see the Track E1 result below). Track E's "ask the user for
 signed float SLC" item is dropped either way — the complex data is already here.
 
+## !! INDEPENDENT RE-EVALUATION (2026-09-05) — read before trusting any GT number below
+
+Every synthetic-GT number in this file up to 2026-09-05 was measured against a
+"clean proxy" that was itself an output of this pipeline:
+
+```python
+clean = denoise(amp, TrainConfig(iters=700))["denoised"]   # circular
+```
+
+Measured consequence: the proxy carries only **46%** of the input's fine
+texture (high-pass std / mean: input 0.607, proxy 0.277), so resembling it
+rewards smoothing. `sspmnet/phantom.py` + `scripts/experiments/run_indep_eval.py`
+re-score the headline claims against a reflectivity field built from scratch —
+no network, no real pixels in the reference. Table
+`docs/figures/metrics_indep_eval.txt`, figure `compare_indep_eval.png`.
+
+| claim | claimed (circular GT) | independent GT |
+|---|---|---|
+| A1/A2 `pixel+group` | +0.64 / +1.51 dB | **+0.605 / +0.692 dB — HOLDS** (HV was ~2x inflated) |
+| C1 `xpol_pair_input` | +0.13 dB (HV) | **+0.758 dB (HV), EPI(HV) +0.046 — BIGGER than claimed** |
+| E1 `sat_censored` | +0.85 / +0.63 dB | **+0.051 / +0.050 dB, EPI(HV) −0.016 — DOES NOT REPLICATE** |
+| baseline -> full stack | — | **+1.399 / +2.799 dB, EPI(HV) +0.189** |
+
+**E1 is retracted as a win.** Its headline gain was a protocol artefact, and the
+mechanism is now visible: the E1 output's texture (0.276) sits almost exactly on
+the circular proxy's (0.277), i.e. it scored for resembling the reference rather
+than for denoising. On the phantom, clipping costs 3.12 dB of PSNR(HV)
+(41.529 unclipped -> 38.412 clipped) and E1 recovers 0.05 dB of it — 1.6%,
+inside the 0.10 dB single-seed noise floor. The one-sided loss can lift a mildly
+clipped smooth tail but cannot reconstruct spiky point targets from censored
+information. What survives on the real patch are the scale-invariant,
+non-circular metrics only: ENLr(HH) 0.879->0.922, flat-water grain 0.484->0.455,
+scale-matched satRatio 0.797->0.847. Small, real, not a dB win. Defaults stay
+off.
+
+**C1 is upgraded, with a caveat.** `xpol_pair_input` buys far more accuracy than
+the circular protocol could see (+0.758 dB HV, EPI +0.046) — but on the phantom
+its flat-band grain DOUBLES (flatHP 2.33 -> 5.16), contradicting the Track C
+revision's "no flat grain penalty" (real water CV 0.063 vs 0.068). The phantom's
+flat band is exactly constant, so every fluctuation there is pure error; the
+real "flat water" has its own texture and was masking the grain. **The real-data
+grain measurements in this file are therefore optimistic.** C1 is an
+accuracy-vs-flat-grain trade, not a free win — report it as such.
+
+**A1/A2 holds** and is the one genuine structural win: PSNR +0.605/+0.692,
+SSIM(HV) 0.922->0.958, flat grain 4.18->2.33 (nearly halved).
+
+**Caveat on the phantom itself:** it is one independent reference, not the
+truth. Its bright tail is 220 isolated point targets up to 15x q99 (the real
+data's max/q99 is 16x, so the range is right, but the density and spikiness are
+a design choice) and that character is what drives the E1 verdict. Read it
+together with the real patch's scale-invariant metrics, never alone.
+
 ## State of the complex-data (RI / MERLIN) work — branch `feature/complex-ri-merlin`
 
 Extends the pipeline with the real/imaginary SLC components (`data/tiff/`,
@@ -308,7 +361,11 @@ ENL-ROI >= +50% at equal EPI.
   recover >= +1.0 dB of the measured -1.7 dB clipping cost on GT at equal
   EPI, no flat grain increase.
 
-- Track E1 RESULT (2026-09-05): **POSITIVE, but short of the +1.0 dB bar.**
+- Track E1 RESULT (2026-09-05): **RETRACTED — see the independent
+  re-evaluation section at the top of this file. The dB gain below was measured
+  against the circular proxy and does NOT replicate (+0.05 dB, EPI(HV) −0.016
+  on an independent ground truth). Kept for the record; defaults stay off.**
+  Original write-up: POSITIVE, but short of the +1.0 dB bar.
   The censored one-sided data term (`TrainConfig.sat_censored`) recovers a
   large part of the 8-bit clipping cost that A4 measured. Protocol identical
   to A4's matched-uint8-clipping GT leg, re-run on the current pixel+group +

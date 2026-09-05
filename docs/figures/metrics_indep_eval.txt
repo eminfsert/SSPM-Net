@@ -1,0 +1,14 @@
+INDEPENDENT evaluation vs a from-scratch phantom ground truth (sspmnet/phantom.py) — no network, no real pixels in the reference. All outputs LS scale-matched. flatHP = high-pass std of HV over the phantom's flat band (clean 25.1182)
+  Method            PSNR(HH)   PSNR(HV)   SSIM(HH)   SSIM(HV)    EPI(HH)    EPI(HV)    ENL(HV) EPIurb(HV)   RMSEbrgt    brightR     flatHP
+  baseline           34.4511    38.7302     0.9187     0.9098     0.4721     0.6397     5.6222     0.6635   362.7596     0.4083     1.1389
+  stack-oldbase      35.1954    40.0792     0.9352     0.9218     0.6404     0.7701     0.1816     0.8147   321.8911     0.7431     4.1804
+  stack-pg           35.8000    40.7711     0.9506     0.9582     0.7092     0.7823     6.2212     0.8398   305.5105     0.8254     2.3257
+  stack-pairin       35.8500    41.5293     0.9516     0.9648     0.6841     0.8287     1.5270     0.8608   299.2786     0.8739     5.1621
+  clip-pairin        34.4675    38.4120     0.9227     0.8870     0.4795     0.6749    19.0379     0.6944   367.3624     0.3926     1.5217
+  clip-E1            34.5181    38.4622     0.9260     0.8904     0.4874     0.6592    15.8810     0.6864   365.8101     0.4067     1.7634
+
+Re-test of the headline claims (independent GT):
+  A1/A2 pixel+group (claimed +0.64/+1.51) dPSNR(HH) +0.605  dPSNR(HV) +0.692  dEPI(HV) +0.0122
+  C1 xpol_pair_input (claimed +0.13 HV) dPSNR(HH) +0.050  dPSNR(HV) +0.758  dEPI(HV) +0.0464
+  E1 censored (claimed +0.85/+0.63)  dPSNR(HH) +0.051  dPSNR(HV) +0.050  dEPI(HV) -0.0156
+  baseline -> today's full stack     dPSNR(HH) +1.399  dPSNR(HV) +2.799  dEPI(HV) +0.1890

@@ -158,3 +158,35 @@ olcek-eslestirilmis olmali (GT bacagindaki brightR zaten oyleydi).
 **SIRADAKI IS: E2 log-domain.** Kirpma maliyetinin kalan ~yarisi 8-bit dosyanin ICERMEDIGI bilgi; E2 ona
 diger taraftan saldiriyor: tam aralikli `data/example_quadpol.npy` + `domain="log"` pipeline (agir parlak
 kuyruk ancak log'da temsil edilebiliyor). E1 ve E2 ALTERNATIF DEGIL, TAMAMLAYICI.
+
+**BAGIMSIZ YENIDEN DEGERLENDIRME (2026-09-05) — E1 GERI CEKILDI, PROTOKOL DUZELTILDI.**
+Kullanici "cogu marjinal, dogru yolda miyiz" diye sordu; olcunce IKI sorun cikti. (1) A1/A2'den beri hicbir
+degisiklik TAVANI YUKSELTMIYOR (E1 dahil: kirpmali 23.657/21.572 vs kirpmasiz 24.457/21.629 -> kaybedileni
+geri aliyor). (2) DAHA CIDDI: sentetik GT protokolunun "temiz proxy"si pipeline'in KENDI ciktisiydi
+(`clean = denoise(amp, TrainConfig(iters=700))`) -> DONGUSEL. Proxy girdinin dokusunun sadece %46'sini
+tasiyor (hp std/mean: girdi 0.607, proxy 0.277), yani duzlestirilmis bir hedef; ona benzemek odullendiriliyor.
+COZUM: `sspmnet/phantom.py` — sifirdan yansitirlik alani (ag yok, gercek piksel yok): parcali bolgeler,
+sabit karanlik duz bant, dokulu kentsel bloklar, ince cizgiler, 220 nokta hedef; HV==VH resiprosite;
+dinamik aralik 15.3x (gercek 16x). Maskeler INSA GEREGI donuyor (duz bant tam sabit oldugu icin persentil
+esigi + kati `<` hicbir piksel secmiyordu — bu hata yakalandi). `scripts/experiments/run_indep_eval.py`
+uc mansed iddiayi yeniden puanladi (6 kosu, .npy cache'li):
+  A1/A2 pixel+group : iddia +0.64/+1.51 -> BAGIMSIZ **+0.605/+0.692 dB — AYAKTA** (HV ~2x sismis)
+  C1 xpol_pair_input: iddia +0.13 (HV)  -> BAGIMSIZ **+0.758 dB, EPI(HV) +0.046 — IDDIADAN BUYUK**
+  E1 sat_censored   : iddia +0.85/+0.63 -> BAGIMSIZ **+0.051/+0.050 dB, EPI(HV) -0.016 — TEKRARLAMIYOR**
+  baseline -> tam yigin: **+1.399/+2.799 dB, EPI(HV) +0.189** (tezin savunabilecegi manset)
+**E1 GERI CEKILDI.** Mekanizma gorunur: E1 ciktisinin dokusu (0.276) dongusel proxy'ninkine (0.277)
+neredeyse birebir oturuyor -> gurultu giderdigi icin degil, referansa benzedigi icin puan almis. Fantomda
+kirpma 3.12 dB PSNR(HV) kaybettiriyor (41.529 -> 38.412) ve E1 bunun 0.05 dB'sini (%1.6) geri aliyor =
+0.10 dB gurultu tabaninin icinde. Tek-tarafli kayip HAFIF kirpilmis DUZ bir kuyrugu kaldirabilir ama
+sansurlu bilgiden SIVRI nokta hedefleri yeniden kuramaz. Gercek yamada ayakta kalan tek sey dongusel
+OLMAYAN olcege-duyarsiz metrikler: ENLr(HH) 0.879->0.922, duz-su grain 0.484->0.455, olcek-eslestirilmis
+satRatio 0.797->0.847. Kucuk, gercek, ama dB kazanci degil. Varsayilanlar KAPALI kaliyor.
+**C1 YUKSELTILDI ama uyarili:** dogrulukta dongusel protokolun goremedigi kadar iyi, ancak fantomda duz-bant
+grain'i IKIYE KATLANIYOR (flatHP 2.33 -> 5.16) — Track C revizyonunun "grain cezasi yok" ifadesiyle celisiyor.
+Sebep: fantomun duz bandi TAM SABIT, oradaki her dalgalanma saf hata; gercek "duz su"nun kendi dokusu var ve
+grain'i maskeliyor. **DOLAYISIYLA REPODAKI TUM GERCEK-VERI GRAIN OLCUMLERI IYIMSER.** C1 = dogruluk-vs-duz-alan
+grain TAKASI, bedava kazanc degil.
+**A1/A2 AYAKTA** ve tek gercek yapisal kazanim (SSIM(HV) 0.922->0.958, duz grain 4.18->2.33).
+FANTOM UYARISI: tek bir bagimsiz referans, hakikat degil. Parlak kuyrugu 220 sivri nokta hedef ve E1 hukmunu
+bu karakter belirliyor. Her zaman gercek yamanin olcege-duyarsiz metrikleriyle BIRLIKTE okunmali.
+Tablo `docs/figures/metrics_indep_eval.txt`, figur `compare_indep_eval.png`.

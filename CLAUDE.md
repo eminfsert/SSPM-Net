@@ -82,10 +82,11 @@ not help".
 (`phase_smooth_boost=1.5`, `phase_fidelity=0.5`), and only when `pha=` is
 passed (`trainer.py:359`).
 
-**Next work is now Track F (coherent SLC), ahead of Track E.** Track E
-(log-domain, the measured −1.7 dB 8-bit clipping cost) stays valid and
-independent; its "ask the user for signed float SLC" item is dropped — the
-data is already here.
+**Direction:** Track F (coherent SLC) is scoped down — the cheap coherent wins
+are measured and negative; what remains is the C3/T3 covariance route, which is
+real but substantial work. Track E stays the larger *measured* headroom and is
+what was run next (see the Track E1 result below). Track E's "ask the user for
+signed float SLC" item is dropped either way — the complex data is already here.
 
 ## State of the complex-data (RI / MERLIN) work — branch `feature/complex-ri-merlin`
 
@@ -306,6 +307,59 @@ ENL-ROI >= +50% at equal EPI.
   the user supplies full-range Re/Im and the ~16 scene patches. Bar:
   recover >= +1.0 dB of the measured -1.7 dB clipping cost on GT at equal
   EPI, no flat grain increase.
+
+- Track E1 RESULT (2026-09-05): **POSITIVE, but short of the +1.0 dB bar.**
+  The censored one-sided data term (`TrainConfig.sat_censored`) recovers a
+  large part of the 8-bit clipping cost that A4 measured. Protocol identical
+  to A4's matched-uint8-clipping GT leg, re-run on the current pixel+group +
+  xpol_pair_input base; A4's negative control reproduces exactly
+  (`clip+sat` -1.80/-1.48 dB), so the protocol is sound.
+
+  Clipping cost this session: HH -1.652 dB, HV -0.771 dB. Recovered:
+
+  | variant | HH | HV |
+  |---|---|---|
+  | `clip+sat` (A4, drop saturated) | -1.804 dB | -1.475 dB |
+  | `clip+cens` (E1) | **+0.824 dB** | **+0.594 dB** |
+  | `clip+cens+tv.5` | **+0.853 dB (52%)** | **+0.625 dB (81%)** |
+  | `clip+cens+tv1` | +0.770 dB | +0.612 dB |
+
+  What makes this credible rather than a metric artefact: EVERY accuracy
+  metric moves together. GT EPI(HH) 0.774->0.817, EPI(HV) 0.804->0.830,
+  SSIM(HV) 0.813->0.833, bright-top-1% RMSE 49.9->41.0, brightR (mean
+  output/clean over the top-1% clean pixels, the flattening detector)
+  0.777->0.821. And the mandatory flat-water grain column from the Track C
+  lesson goes DOWN, not up: waterHP 0.4213->0.3688 (below the unclipped
+  ceiling's 0.3718). GT ENL(HV) falls 1486->1380 — honest: the high ENL of
+  `clip`/`clip+sat` came from flattening bright structure (brightR 0.677).
+
+  Real patch agrees: EPI(HH) 0.667->0.717, EPI(HV) 0.721->0.754, ENLr(HH)
+  0.879->0.922 (toward the ideal 1), satRatio (median output/input where HV
+  itself is clipped) 0.686->0.763, waterHP 0.484->0.455, waterCV
+  0.097->0.090. Figure: flat-water crop std 2.99->2.84, clipped bright block
+  mean 98.2->101.9 (less flattened; noisy input 109.5).
+
+  **Verdict against the plan's bar (recover >= +1.0 dB in BOTH channels,
+  equal EPI, no grain increase):** EPI and grain criteria are MET and
+  exceeded; the dB criterion is NOT met (52% / 81% of the cost). The
+  real-patch `satRatio >= 0.9` sub-criterion is also not met (0.763, up from
+  0.686). Still the first genuine multi-metric win since A1/A2, and ~8x the
+  measured 0.10 dB single-seed noise floor.
+
+  **Recommended:** `sat_censored=True, sat_tv_relax=0.5` with
+  `sat=` from `load_quadpol_tiffs(..., return_sat=True)`. `sat_tv_relax`
+  adds nothing in PSNR (+0.03 dB, inside noise) but gives the best EPI and
+  the lowest flat-water grain; 1.0 overshoots (RMSEbright 41.0->43.1).
+  Defaults in `TrainConfig` left off pending the E2 comparison.
+  Table `docs/figures/metrics_track_e.txt`, figure
+  `docs/figures/compare_track_e.png`, script
+  `scripts/experiments/run_track_e.py`.
+
+  **Next: E2 log-domain.** The remaining ~half of the clipping cost is the
+  information the 8-bit file simply does not contain; E2 attacks it from the
+  other side with the full-range `data/example_quadpol.npy` and a log-domain
+  pipeline (`domain="log"`), where the heavy bright tail is representable at
+  all. E1 and E2 are complementary, not alternatives.
 
 **Open items:** flat/rural patch test (the natural place where
 `phase_surface_boost` could still help — an urban patch has little surface

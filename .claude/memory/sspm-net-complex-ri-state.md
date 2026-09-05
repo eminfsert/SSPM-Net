@@ -121,3 +121,35 @@ clip+cens/+tv.5/+tv1 ve gercek base/cens/cens+tv.5; .npy cache'li. Tabloya yeni 
 (top-%1 temiz pikselde ortalama cikti/temiz orani = duzlestirme dedektoru), satRatio (gercek yamada
 doymus piksellerde cikti/girdi), ve zorunlu waterHP/waterCV. CITA: GT'de kirpma maliyetinin >= +1.0 dB'si
 her iki kanalda geri, esit EPI, su grain artisi yok, gercekte brightR/satRatio >= 0.9.
+
+**TRACK E1 SONUC (2026-09-05): POZITIF ama +1.0 dB citasinin altinda.** Sansurlu tek-tarafli veri terimi
+(`sat_censored`) 8-bit kirpma maliyetinin buyuk kismini geri kazaniyor. Protokol A4'un eslesmis-uint8-kirpma
+GT bacagiyla ayni, guncel pixel+group + xpol_pair_input tabaninda tekrar kosuldu; A4'un negatif kontrolu
+BIREBIR tekrarlandi (`clip+sat` -1.80/-1.48 dB) -> protokol saglam.
+Bu oturumda kirpma maliyeti: HH -1.652 dB, HV -0.771 dB. Geri kazanim: `clip+cens` +0.824/+0.594 dB;
+**`clip+cens+tv.5` +0.853 dB (maliyetin %52'si) / +0.625 dB (%81'i)** = EN IYI; `+tv1` +0.770/+0.612 (asiyor).
+ARTEFAKT DEGIL cunku TUM dogruluk metrikleri birlikte hareket ediyor: GT EPI(HH) 0.774->0.817,
+EPI(HV) 0.804->0.830, SSIM(HV) 0.813->0.833, parlak-top%1 RMSE 49.9->41.0, brightR (top-%1 temiz pikselde
+ortalama cikti/temiz = duzlestirme dedektoru) 0.777->0.821. Track C dersinden gelen ZORUNLU duz-su grain
+sutunu ARTMIYOR, DUSUYOR: waterHP 0.4213->0.3688 (kirpmasiz tavanin 0.3718'inin bile altinda).
+GT ENL(HV) 1486->1380 dusuyor -- DURUST: `clip`/`clip+sat`'in yuksek ENL'i parlak yapiyi duzlestirmekten
+geliyordu (brightR 0.677'ye kadar).
+Gercek yama ayni yonu dogruluyor: EPI(HH) 0.667->0.717, EPI(HV) 0.721->0.754, ENLr(HH) 0.879->0.922
+(ideal 1'e dogru), satRatio (HV'nin KENDISI kirpilmis piksellerde medyan cikti/girdi) 0.686->0.763,
+waterHP 0.484->0.455, waterCV 0.097->0.090. Figur: duz-su crop std 2.99->2.84, kirpilmis parlak blok
+ortalamasi 98.2->101.9 (gurultulu girdi 109.5 -> daha az duzlesme).
+CITA DEGERLENDIRMESI (>= +1.0 dB her iki kanalda, esit EPI, grain artisi yok): EPI ve grain kriterleri
+GECILDI ve asildi; dB kriteri GECILMEDI (%52/%81). Gercek yamada `satRatio >= 0.9` alt kriteri de
+gecilmedi (0.763). Yine de A1/A2'den beri ilk gercek cok-metrikli kazanim ve olculmus 0.10 dB tek-seed
+gurultu tabaninin ~8 kati.
+ONERI: `sat_censored=True, sat_tv_relax=0.5` + `load_quadpol_tiffs(..., return_sat=True)`'dan `sat=`.
+`sat_tv_relax` PSNR'de bir sey katmiyor (+0.03 dB, gurultu icinde) ama en iyi EPI ve en dusuk duz-su
+grain'ini veriyor; 1.0 asiyor (RMSEbright 41.0->43.1). TrainConfig varsayilanlari E2 karsilastirmasina
+kadar KAPALI birakildi.
+Tablo `docs/figures/metrics_track_e.txt`, figur `docs/figures/compare_track_e.png`, script
+`scripts/experiments/run_track_e.py` (tum kosular .npy cache'li).
+METRIK HATASI DUZELTILDI: `satRatio` once BIRLESIK doyma maskesini kullaniyordu (baska kanalda doymus ama
+HV'de ~0 olan pikseller orani 5.7e8'e sisiriyordu); artik kanal-basi maske + medyan.
+**SIRADAKI IS: E2 log-domain.** Kirpma maliyetinin kalan ~yarisi 8-bit dosyanin ICERMEDIGI bilgi; E2 ona
+diger taraftan saldiriyor: tam aralikli `data/example_quadpol.npy` + `domain="log"` pipeline (agir parlak
+kuyruk ancak log'da temsil edilebiliyor). E1 ve E2 ALTERNATIF DEGIL, TAMAMLAYICI.

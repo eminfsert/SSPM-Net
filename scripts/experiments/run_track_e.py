@@ -285,3 +285,44 @@ for name, d in runs_r.items():
 with open(f"{OUT}/metrics_track_e.txt", "w") as f:
     f.write("\n".join(lines) + "\n")
 print(f"\nwrote {OUT}/metrics_track_e.txt")
+
+# ── figures: real patch HV (full / zoom / flat-water crop) + a bright-tail
+#    row, since E1 is specifically about the clipped bright structures ──
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+show = list(runs_r)
+zy, zx, zs = 180, 260, 160
+wy, wx, ws = 180, 408, 32            # the archived flat-water crop
+# brightest saturated block: centre the crop on the densest HV-clipped area
+sat_dens = _local_mean(sat_real[1].astype(np.float64), 33)
+by, bx = np.unravel_index(np.argmax(sat_dens), sat_dens.shape)
+bs = 96
+by = int(np.clip(by - bs // 2, 0, amp.shape[1] - bs))
+bx = int(np.clip(bx - bs // 2, 0, amp.shape[2] - bs))
+
+ims = [("Noisy", amp.astype(np.float64))] + [(n, runs_r[n]) for n in show]
+fig, axes = plt.subplots(4, len(ims), figsize=(3.6 * len(ims), 14.5))
+vmax = np.quantile(amp[1], 0.99)
+wmax = 3.0 * np.median(runs_r["base"][1][wy:wy + ws, wx:wx + ws])
+bmax = float(np.quantile(amp[1][by:by + bs, bx:bx + bs], 0.99))
+for col, (nm, im_) in enumerate(ims):
+    v = np.clip(im_[1] / vmax, 0, 1)
+    axes[0, col].imshow(v, cmap="gray", vmin=0, vmax=1)
+    axes[0, col].set_title(f"{nm} — HV", fontsize=9)
+    axes[1, col].imshow(v[zy:zy + zs, zx:zx + zs], cmap="gray",
+                        vmin=0, vmax=1, interpolation="nearest")
+    axes[1, col].set_title("zoom — HV", fontsize=8)
+    wc = im_[1][wy:wy + ws, wx:wx + ws]
+    axes[2, col].imshow(wc, cmap="gray", vmin=0, vmax=wmax, interpolation="nearest")
+    axes[2, col].set_title(f"flat water  std={wc.std():.2f} "
+                           f"CV={wc.std() / max(wc.mean(), 1e-9):.3f}", fontsize=8)
+    bc = im_[1][by:by + bs, bx:bx + bs]
+    axes[3, col].imshow(bc, cmap="gray", vmin=0, vmax=bmax, interpolation="nearest")
+    axes[3, col].set_title(f"clipped bright block  mean={bc.mean():.1f}", fontsize=8)
+for ax in axes.ravel():
+    ax.axis("off")
+fig.tight_layout()
+fig.savefig(f"{OUT}/compare_track_e.png", dpi=130)
+print(f"wrote {OUT}/compare_track_e.png")

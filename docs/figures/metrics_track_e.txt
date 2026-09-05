@@ -1,0 +1,16 @@
+Track E1 synthetic-GT (vs known clean; scale-matched); base = pixel+group + xpol_pair_input.  RMSEbrgt = RMSE over the top-1% clean pixels; brightR = mean output/clean ratio there (flattening detector, ideal 1); waterHP = flat-water high-pass std of HV (clean 0.4702)
+  Method             PSNR(HH)   PSNR(HV)   SSIM(HV)    EPI(HH)    EPI(HV)    ENL(HV)   RMSEbrgt    brightR    waterHP    waterCV
+  noclip              24.4565    23.0872     0.8367     0.8400     0.8344  1807.9948    29.4003     0.9055     0.3718     0.0951
+  clip                22.8045    22.3164     0.8125     0.7737     0.8044  1485.7528    49.9347     0.7770     0.4213     0.0942
+  clip+sat            21.0002    20.8409     0.7710     0.6991     0.7480  1729.3249    71.3036     0.6767     0.4926     0.0966
+  clip+cens           23.6283    22.9105     0.8313     0.8065     0.8271  1273.8658    40.2315     0.8244     0.4001     0.0962
+  clip+cens+tv.5      23.6574    22.9409     0.8332     0.8165     0.8302  1379.8979    40.9750     0.8214     0.3688     0.0919
+  clip+cens+tv1       23.5748    22.9281     0.8339     0.8209     0.8314  1694.9498    43.0933     0.8122     0.3575     0.0892
+  clipping cost(HH) = +1.652 dB;  recovered: clip+sat -1.804 dB, clip+cens +0.824 dB, clip+cens+tv.5 +0.853 dB, clip+cens+tv1 +0.770 dB
+  clipping cost(HV) = +0.771 dB;  recovered: clip+sat -1.475 dB, clip+cens +0.594 dB, clip+cens+tv.5 +0.625 dB, clip+cens+tv1 +0.612 dB
+
+Track E1 real patch.  satRatio = MEDIAN output/input over the pixels where HV ITSELF is clipped (>=1 means the bright tail is not flattened; the per-channel mask and the median keep it robust - the union mask includes pixels near zero in HV and blows up)
+  Method              EPI(HH)    EPI(HV)   ENLr(HH)   ENLr(HV)ENL-ROI(HV)   satRatio    waterHP    waterCV
+  base                 0.6669     0.7206     0.8795     1.0507     1.1765     0.6860     0.4842     0.0968
+  cens                 0.7041     0.7471     0.9088     1.0418     1.0993     0.7559     0.4794     0.0942
+  cens+tv.5            0.7165     0.7540     0.9218     1.0467     1.0886     0.7631     0.4548     0.0902

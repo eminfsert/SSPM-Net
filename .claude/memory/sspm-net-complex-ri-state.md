@@ -67,3 +67,33 @@ Work done 2026-08-29 on branch `feature/complex-ri-merlin`; main untouched. Bran
 **KALINAN NOKTA (2026-09-02 session sonu): SIRADAKİ İŞ = Track E** (`docs/plans/track-e-fullrange-logdomain-plan.md`): E1 sansürlü tek-taraflı kayıp (doymuş hedef = alt sınır; mevcut veriyle hemen) → E2 log-domain pipeline (`domain="log"`, tam aralıklı `data/example_quadpol.npy`, log-Rayleigh histogram) → E3/Track B (kullanıcıdan: ~16 sahne yaması `data/scene/`, tam aralıklı float Re/Im, teslimat önceliği kararı radyometrik/görsel). Çıta: GT'de −1.7 dB kırpma maliyetinin ≥ +1.0 dB'si geri, eşit EPI, grain artışı yok. Her şey push edildi (origin/feature/scene-scale-arch).
 
 **RESUME (2026-09-05):** yeni Colab A100-40GB VM, repo /content/SSPM-Net'e yeniden klonlandi (main-only refspec -> `git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'` ile genisletildi), `feature/scene-scale-arch` f2392c07'de checkout edildi. Memory `.claude/memory/` -> `/root/.claude/projects/-content/memory/` geri yuklendi. gh auth bu VM'de yapildi (device flow, eminfsert); `gh auth setup-git` gerekli. git user.name/email lokal olarak tez yazarina set edildi. torch 2.11.0+cu128, CUDA OK. `results/` bos (beklenen). Kullanici sorusu: "modele su an faz bilgisi veriyor muyuz, versek de neden gurultu gidermede ilerleme yok" -> KOD DOGRULAMASI: HAYIR, aga faz VERILMIYOR (`Config.xpol_snr_input=False` config.py:74; trainer.py:418 `aux_in=None`; model.py forward aux'u yalnizca bayrak acikken concat ediyor). Faz SADECE kayip agirligi olarak giriyor ve o default ACIK (`phase_smooth_boost=1.5`, `phase_fidelity=0.5`, yalnizca `pha=` gecilirse; trainer.py:359 gate). Aga girdi olarak verme denendi = Track D/D2, GT PSNR(HV) -0.31 dB (negatif). SIRADAKI IS degismedi: Track E.
+
+**BULGU (2026-09-05) — FAZ YOK EDILMEMIS: cozme hatasiydi. Onceki tum "faz kullanilamaz" sonuclari GECERSIZ.**
+Kullanici "faz neden yok edilmis, bu raw data?" diye sorunca ham TIFF'ler yeniden olculdu. `*_pha.tiff`
+dosyalari **tam aralikli [0,2pi) SLC fazi** tasiyor; [0,pi]'ye KATLANMIS DEGIL. 2026-09-02'ye kadarki
+oturumlar fazi `pha/255*pi` diye cozuyordu -> |Re|,|Im|'nin ima ettigi kadran acisiyla korelasyon ~0.02
+-> "faz bilesenlerle tutarsiz, sadece uzamsal harita olarak kullanilabilir, 2*phi katlanmis aci sart"
+sonucu. Bu sonuc TAMAMEN yanlis olcek carpanindan dogan bir artefaktti.
+Dogru cozme `phi = pha/255*2pi` (konvansiyon: |Re| ~ |sin phi|, |Im| ~ |cos phi|; 90-derece global donme
+dort kanalda da ayni, her koheransta sadelesir). Kanit (`scripts/experiments/diag_phase_decoding.py`,
+tablo `docs/figures/diag_phase_decoding.txt`): (1) corr(log|Im/Re|, phi'nin ima ettigi oran) = **+0.994**
+dort kanalda ([0,pi] ile 0.01-0.03); (2) faz kadranlari **duzgun dolu (~%25 her biri)** -> isaret bilgisi
+MEVCUT; (3) amp+phi'den |Re|,|Im| yeniden kurulumu **corr 0.996**; (4) fizik: HV-VH tek-aci kompleks
+koherans **0.772** (rastgele-faz null 0.185; eski cift-aci rotasi 0.639 -> tek aci DAHA IYI, cunku aci
+katlamak faz gurultusunu de katliyor), HH-VV 0.348, uzamsal lag-1 0.698 -> lag2 0.321 (gercek SAR
+oversampling imzasi).
+**ACILAN YOL:** kompleks SLC artik elde: `S = amp * exp(1j*phi)`. Koherent HV+VH birlestirme olculdu:
+ENL 0.602 (bugunku inkoherent amp ortalamasi) -> **0.686 koherent (+%14)**, karanlik-alan ortalamasi
+449 -> 320 (**-%29 termal gurultu, bedava** -- `thermal_debias` knob'unun elle yapmaya calistigi sey,
+fizikten geliyor). corrSpan 0.669 -> 0.639 dustu, incelenecek. Bunun otesinde: gercek koherent MERLIN,
+C3/T3 kovaryans yolu, isaretli HH-VV CPD -- hepsi "gelecek calisma / imzali float SLC lazim" diye
+kapatilmisti, artik MEVCUT VERIYLE acik.
+**ETKISI:** Track C/D'nin faz knob'lari (`phase_smooth_boost`, `phase_fidelity`, `phase_protect`,
+`phase_surface_boost`, `phase_helix_protect`, `fact_snr_gate`, D2 `xpol_snr_input`) hepsi 2*phi katlanmis
+haritalar uzerine kuruluydu = bilgi kaybi. Bunlarin negatif/marjinal cikmasi artik aciklanabilir.
+**Modele faz girdi olarak VERILMIYOR** (kod: `Config.xpol_snr_input=False` config.py:74; trainer.py:418
+`aux_in=None`; model.py forward aux'u yalnizca bayrak acikken concat ediyor). Faz sadece kayip agirligi
+(`phase_smooth_boost=1.5`, `phase_fidelity=0.5`, `pha=` gecilirse).
+**SIRADAKI IS DEGISTI: Track F (koherent SLC) > Track E.** Track E (log-domain, 8-bit kirpma -1.7 dB)
+hala gecerli ve bagimsiz, ama koherent yol daha buyuk ve daha ucuz gorunuyor. Track E'nin "imzali float
+SLC kullanicidan istenecek" maddesi DUSTU -- veri zaten elimizde.

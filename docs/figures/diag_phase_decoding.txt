@@ -1,0 +1,35 @@
+== 1. Decoding scale: corr(log|Im/Re|, log ratio implied by phi) ==
+   hh: [0,pi]=+0.0088   [0,2pi)=+0.9945
+   hv: [0,pi]=-0.0251   [0,2pi)=+0.9945
+   vh: [0,pi]=-0.0041   [0,2pi)=+0.9946
+   vv: [0,pi]=-0.0105   [0,2pi)=+0.9943
+
+== 2. Quadrant occupancy of phi=pha/255*2pi (full range => ~25%) ==
+   hh: Q1=0.256  Q2=0.254  Q3=0.246  Q4=0.244
+   hv: Q1=0.245  Q2=0.259  Q3=0.254  Q4=0.242
+   vh: Q1=0.257  Q2=0.254  Q3=0.246  Q4=0.243
+   vv: Q1=0.252  Q2=0.247  Q3=0.251  Q4=0.249
+
+== 3. Reconstruction |Re|,|Im| from amp+phi alone ==
+   hh: corr(|Re|)=0.9961  corr(|Im|)=0.9961
+   hv: corr(|Re|)=0.9957  corr(|Im|)=0.9957
+   vh: corr(|Re|)=0.9957  corr(|Im|)=0.9957
+   vv: corr(|Re|)=0.9959  corr(|Im|)=0.9958
+
+== 4. Physical coherences of the recovered SLC (7x7) ==
+   HV-VH single angle (reciprocity) : 0.7724
+   HV-VH doubled angle (old route)  : 0.6392
+   HH-VV                            : 0.3479
+   HH-HV                            : 0.3222
+   HV-VH random-phase NULL          : 0.1845
+   spatial (oversampling) HH lag-k  : lag1=0.698  lag2=0.321  lag3=0.254
+
+== 5. Payoff: coherent vs incoherent cross-pol combination ==
+   variant                            ENL   darkMean  corrSpan
+   HV alone                         0.567       87.3    0.6666
+   VH alone                         0.570     1322.0    0.6634
+   incoherent amp avg (current)     0.602      449.1    0.6686
+   intensity avg                    0.650      704.6    0.6723
+   COHERENT avg (uses phase)        0.686      320.4    0.6388
+
+VERDICT: pha = full-range [0,2pi) SLC phase. The complex data is recoverable; the 'phase is destroyed' conclusion was a decoding bug.

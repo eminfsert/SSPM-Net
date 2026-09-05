@@ -17,6 +17,65 @@ lives on feature branches.
 - Environment is usually a Google Colab A100 VM (ephemeral!): anything not
   pushed to GitHub is lost on runtime reset. `results/` is gitignored.
 
+## !! PHASE DECODING FIX (2026-09-05) — supersedes every "phase is unusable" claim below
+
+The bundled `data/tiff/*_pha.tiff` files carry the **full-range [0, 2*pi) SLC
+phase**. They are NOT folded to [0, pi]. Sessions up to 2026-09-02 decoded them
+as `pha/255*pi`, which correlates ~0.02 with the quadrant angle implied by
+|Re|,|Im| — and that artefact produced the whole "the phase files are pixel-wise
+inconsistent with the components, only the doubled angle 2*phi survives"
+conclusion. **That conclusion was a decoding bug, not a property of the data.**
+
+Correct decoding (convention: `|Re| ~ |sin phi|`, `|Im| ~ |cos phi|`; the global
+90-degree rotation is identical in all four channels and cancels in every
+coherence):
+
+```python
+phi = pha_uint8 / 255.0 * 2 * np.pi
+S   = amp * np.exp(1j * phi)          # complex SLC, recoverable TODAY
+```
+
+Evidence — `scripts/experiments/diag_phase_decoding.py`, table
+`docs/figures/diag_phase_decoding.txt`:
+
+- `corr(log|Im/Re|, ratio implied by phi)` = **+0.994** in all four channels
+  (the [0,pi] decoding gives 0.01–0.03).
+- Phase **quadrants are uniformly occupied (~25% each)** -> the sign
+  information is present, the phase is genuinely full-range.
+- |Re| and |Im| reconstructed from `amp` + `phi` alone: **corr 0.996**.
+- Physics of the recovered SLC: HV–VH single-angle complex coherence **0.772**
+  (random-phase null 0.185; the old doubled-angle route gave 0.639 — doubling
+  the angle also doubles the phase noise), HH–VV 0.348, spatial lag-1 0.698
+  decaying to 0.321 at lag 2 (the real SAR oversampling signature).
+
+**What this opens (measured):** coherent HV+VH combination gives ENL
+0.602 (today's incoherent amplitude average) -> **0.686 (+14%)** and drops the
+dark/thermal-dominated mean 449 -> 320 (**−29% thermal noise, for free** — the
+physical version of what the `thermal_debias` knob tries to do by hand).
+`corrSpan` dips 0.669 -> 0.639, to be investigated. Beyond that: true coherent
+MERLIN, the C3/T3 covariance route and signed HH–VV CPD — all previously
+written off as "future work, needs signed float SLC" — are available with the
+data already in the repo.
+
+**Consequence for the record below:** every phase knob in Tracks C and D
+(`phase_smooth_boost`, `phase_fidelity`, `phase_protect`,
+`phase_surface_boost`, `phase_helix_protect`, `fact_snr_gate`, and D2
+`xpol_snr_input`) was built on the lossy doubled-angle maps. Their negative /
+marginal results are explained by that and should not be read as "phase does
+not help".
+
+**Phase is NOT fed to the network today**: `Config.xpol_snr_input = False`
+(`sspmnet/config.py:74`) -> `aux_in = None` (`sspmnet/trainer.py:418`) ->
+`SSPMNet.forward` only concatenates the aux plane when the flag is on
+(`sspmnet/model.py:193`). Phase enters solely as hand-set loss weights
+(`phase_smooth_boost=1.5`, `phase_fidelity=0.5`), and only when `pha=` is
+passed (`trainer.py:359`).
+
+**Next work is now Track F (coherent SLC), ahead of Track E.** Track E
+(log-domain, the measured −1.7 dB 8-bit clipping cost) stays valid and
+independent; its "ask the user for signed float SLC" item is dropped — the
+data is already here.
+
 ## State of the complex-data (RI / MERLIN) work — branch `feature/complex-ri-merlin`
 
 Extends the pipeline with the real/imaginary SLC components (`data/tiff/`,

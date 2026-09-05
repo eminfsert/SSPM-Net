@@ -103,3 +103,21 @@ haritalar uzerine kuruluydu = bilgi kaybi. Bunlarin negatif/marjinal cikmasi art
 kaliyor, o da gercek ama buyuk bir is. Track E (log-domain, olculmus -1.7 dB kirpma maliyeti) gecerli,
 bagimsiz ve OLCULMUS headroom'u daha buyuk. Track E'nin "imzali float SLC kullanicidan istenecek" maddesi
 her halukarda DUSTU -- kompleks veri zaten elimizde.
+
+**TRACK E1 UYGULANDI + KOSUYOR (2026-09-05).** Kullanici koherent yol yerine Track E'yi secti (olculmus
+en buyuk kayip: 8-bit kirpma -1.7/-1.5 dB). E1 = sansurlu tek-tarafli veri terimi: A4 doymus hedef
+piksellerini veri teriminden ATMANIN ek -1.6 dB kaybettirdigini olcmustu (kirpilmis hedef "biased ama
+bilgili ALT SINIR"); E1 onlari kayipta TUTUYOR ama artigi tek-tarafli yapiyor -> doymus pikselde
+`relu(t - d)`, digerlerinde `|d - t|`. Cikti kirpma seviyesinin USTUNE serbest, ALTINA cezali.
+Eklenen knob'lar (trainer.py + scene_trainer.py aynasi): `TrainConfig.sat_censored` (bool) ve
+`TrainConfig.sat_tv_relax` (float; doymus piksellerde TV kenar agirliklari x(1-r*sat), cunku orada
+tek-tarafli terim tek basina kaldigi icin duzgunluk onceligi parlak yapiyi ezme egiliminde).
+Tum MERLIN-L1 artiklari (co-pol, fused l1/l2, resiprosite-karisimli xpol) `_resid` yardimcisindan
+geciyor; `_wmean` sansur acikken sat agirligini uygulamiyor (pikseller ortalamada KALIYOR).
+Smoke: dort yol da (off/censored/+tv_relax/fused-l2) sonlu, gercek yamada ~%10/kanal doymus piksel.
+Commit'ler: E1 implementasyonu + `scripts/experiments/run_track_e.py`. KOSUYOR arka planda
+(log `results/track_e.log`): sentetik noclip(tavan)/clip(bugun)/clip+sat(A4 negatif kontrolu)/
+clip+cens/+tv.5/+tv1 ve gercek base/cens/cens+tv.5; .npy cache'li. Tabloya yeni sutunlar: brightR
+(top-%1 temiz pikselde ortalama cikti/temiz orani = duzlestirme dedektoru), satRatio (gercek yamada
+doymus piksellerde cikti/girdi), ve zorunlu waterHP/waterCV. CITA: GT'de kirpma maliyetinin >= +1.0 dB'si
+her iki kanalda geri, esit EPI, su grain artisi yok, gercekte brightR/satRatio >= 0.9.

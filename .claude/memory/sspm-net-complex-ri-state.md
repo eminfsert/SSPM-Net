@@ -135,7 +135,7 @@ sutunu ARTMIYOR, DUSUYOR: waterHP 0.4213->0.3688 (kirpmasiz tavanin 0.3718'inin 
 GT ENL(HV) 1486->1380 dusuyor -- DURUST: `clip`/`clip+sat`'in yuksek ENL'i parlak yapiyi duzlestirmekten
 geliyordu (brightR 0.677'ye kadar).
 Gercek yama ayni yonu dogruluyor: EPI(HH) 0.667->0.717, EPI(HV) 0.721->0.754, ENLr(HH) 0.879->0.922
-(ideal 1'e dogru), satRatio (HV'nin KENDISI kirpilmis piksellerde medyan cikti/girdi) 0.686->0.763,
+(ideal 1'e dogru), satRatio (HV'nin KENDISI kirpilmis piksellerde medyan cikti/girdi, LS OLCEK-ESLESTIRILMIS) 0.797->0.847,
 waterHP 0.484->0.455, waterCV 0.097->0.090. Figur: duz-su crop std 2.99->2.84, kirpilmis parlak blok
 ortalamasi 98.2->101.9 (gurultulu girdi 109.5 -> daha az duzlesme).
 CITA DEGERLENDIRMESI (>= +1.0 dB her iki kanalda, esit EPI, grain artisi yok): EPI ve grain kriterleri
@@ -148,8 +148,13 @@ grain'ini veriyor; 1.0 asiyor (RMSEbright 41.0->43.1). TrainConfig varsayilanlar
 kadar KAPALI birakildi.
 Tablo `docs/figures/metrics_track_e.txt`, figur `docs/figures/compare_track_e.png`, script
 `scripts/experiments/run_track_e.py` (tum kosular .npy cache'li).
-METRIK HATASI DUZELTILDI: `satRatio` once BIRLESIK doyma maskesini kullaniyordu (baska kanalda doymus ama
-HV'de ~0 olan pikseller orani 5.7e8'e sisiriyordu); artik kanal-basi maske + medyan.
+METRIK HATASI x2 DUZELTILDI: (1) `satRatio` once BIRLESIK doyma maskesini kullaniyordu (baska kanalda doymus
+ama HV'de ~0 olan pikseller orani 5.7e8'e sisiriyordu) -> artik kanal-basi maske + medyan. (2) `satRatio`
+OLCEGE DUYARLI ve ham olcumde yaniltici: ham degerler (base 0.686 -> E1 0.763) kismen hangi ciktinin genel
+olarak daha dusuk oturdugunu raporluyor. Amplitud-only baseline ham 0.553 ama olcek-eslestirilmis 0.813 ->
+yani parlak kuyrukta guncel yigindan (0.797) KOTU DEGIL. Her iki script artik once LS olcek eslestiriyor.
+DERS: waterHP ve satRatio olcege duyarli; EPI/ENLr/CV degil. Radyometrik seviye kiyaslayan her sutun
+olcek-eslestirilmis olmali (GT bacagindaki brightR zaten oyleydi).
 **SIRADAKI IS: E2 log-domain.** Kirpma maliyetinin kalan ~yarisi 8-bit dosyanin ICERMEDIGI bilgi; E2 ona
 diger taraftan saldiriyor: tam aralikli `data/example_quadpol.npy` + `domain="log"` pipeline (agir parlak
 kuyruk ancak log'da temsil edilebiliyor). E1 ve E2 ALTERNATIF DEGIL, TAMAMLAYICI.

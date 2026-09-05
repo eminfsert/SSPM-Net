@@ -335,15 +335,20 @@ ENL-ROI >= +50% at equal EPI.
 
   Real patch agrees: EPI(HH) 0.667->0.717, EPI(HV) 0.721->0.754, ENLr(HH)
   0.879->0.922 (toward the ideal 1), satRatio (median output/input where HV
-  itself is clipped) 0.686->0.763, waterHP 0.484->0.455, waterCV
-  0.097->0.090. Figure: flat-water crop std 2.99->2.84, clipped bright block
-  mean 98.2->101.9 (less flattened; noisy input 109.5).
+  itself is clipped, LS scale-matched) 0.797->0.847, waterHP 0.484->0.455,
+  waterCV 0.097->0.090.
+
+  CAUTION on `satRatio`: it is scale-SENSITIVE and must be measured after
+  scale-matching. The raw ratios (base 0.686 -> E1 0.763) partly just report
+  which output sits lower overall; the amplitude-only baseline scores 0.553
+  raw but 0.813 matched, i.e. it is NOT worse than the current stack on the
+  bright tail once the scales are aligned. Both scripts now match first.
 
   **Verdict against the plan's bar (recover >= +1.0 dB in BOTH channels,
   equal EPI, no grain increase):** EPI and grain criteria are MET and
   exceeded; the dB criterion is NOT met (52% / 81% of the cost). The
-  real-patch `satRatio >= 0.9` sub-criterion is also not met (0.763, up from
-  0.686). Still the first genuine multi-metric win since A1/A2, and ~8x the
+  real-patch `satRatio >= 0.9` sub-criterion is also not met (0.847
+  scale-matched, up from 0.797). Still the first genuine multi-metric win since A1/A2, and ~8x the
   measured 0.10 dB single-seed noise floor.
 
   **Recommended:** `sat_censored=True, sat_tv_relax=0.5` with

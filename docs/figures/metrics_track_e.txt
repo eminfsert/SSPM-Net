@@ -9,8 +9,8 @@ Track E1 synthetic-GT (vs known clean; scale-matched); base = pixel+group + xpol
   clipping cost(HH) = +1.652 dB;  recovered: clip+sat -1.804 dB, clip+cens +0.824 dB, clip+cens+tv.5 +0.853 dB, clip+cens+tv1 +0.770 dB
   clipping cost(HV) = +0.771 dB;  recovered: clip+sat -1.475 dB, clip+cens +0.594 dB, clip+cens+tv.5 +0.625 dB, clip+cens+tv1 +0.612 dB
 
-Track E1 real patch.  satRatio = MEDIAN output/input over the pixels where HV ITSELF is clipped (>=1 means the bright tail is not flattened; the per-channel mask and the median keep it robust - the union mask includes pixels near zero in HV and blows up)
+Track E1 real patch.  satRatio = MEDIAN output/input over the pixels where HV ITSELF is clipped (>=1 means the bright tail is not flattened; per-channel mask + median for robustness, and the output is LS scale-matched onto the input first - the raw ratio just reports which output sits lower overall)
   Method              EPI(HH)    EPI(HV)   ENLr(HH)   ENLr(HV)ENL-ROI(HV)   satRatio    waterHP    waterCV
-  base                 0.6669     0.7206     0.8795     1.0507     1.1765     0.6860     0.4842     0.0968
-  cens                 0.7041     0.7471     0.9088     1.0418     1.0993     0.7559     0.4794     0.0942
-  cens+tv.5            0.7165     0.7540     0.9218     1.0467     1.0886     0.7631     0.4548     0.0902
+  base                 0.6669     0.7206     0.8795     1.0507     1.1765     0.7968     0.4842     0.0968
+  cens                 0.7041     0.7471     0.9088     1.0418     1.0993     0.8395     0.4794     0.0942
+  cens+tv.5            0.7165     0.7540     0.9218     1.0467     1.0886     0.8471     0.4548     0.0902

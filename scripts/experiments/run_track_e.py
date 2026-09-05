@@ -256,11 +256,16 @@ def ratio_enl(d, c):
     return (v.mean() / v.std()) ** 2
 
 
-sat_any_r = sat_real.any(axis=0)
+# Per-CHANNEL saturation mask: the union mask includes pixels that are
+# saturated in some other channel while HV itself sits near zero, and the
+# output/input ratio there is meaningless (it blew up to 5.7e8).
+sat_hv_r = sat_real[1]
 cols_r = ["EPI(HH)", "EPI(HV)", "ENLr(HH)", "ENLr(HV)", "ENL-ROI(HV)",
           "satRatio", "waterHP", "waterCV"]
-title_r = ("Track E1 real patch.  satRatio = mean output/input over the "
-           "SATURATED pixels (>=1 means the bright tail is not flattened)")
+title_r = ("Track E1 real patch.  satRatio = MEDIAN output/input over the "
+           "pixels where HV ITSELF is clipped (>=1 means the bright tail is "
+           "not flattened; the per-channel mask and the median keep it robust "
+           "- the union mask includes pixels near zero in HV and blows up)")
 hdr_r = "  {:<16}".format("Method") + "".join(f"{c:>{W}}" for c in cols_r)
 print("\n" + title_r)
 print(hdr_r)
@@ -271,7 +276,7 @@ for name, d in runs_r.items():
             epi_metric(amp[1].astype(np.float64), d[1]),
             ratio_enl(d, 0), ratio_enl(d, 1),
             enl_roi_multi(d[1], rois_r, rs_r),
-            float((d[1][sat_any_r] / np.maximum(amp[1][sat_any_r], 1e-9)).mean()),
+            float(np.median(d[1][sat_hv_r] / np.maximum(amp[1][sat_hv_r], 1.0))),
             g[0], g[1]]
     line = "  {:<16}".format(name) + "".join(f"{v:>{W}.4f}" for v in vals)
     print(line, flush=True)

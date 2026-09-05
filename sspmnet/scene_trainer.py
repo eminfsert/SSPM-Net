@@ -335,19 +335,31 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
                              for pi, y, x in crops], dim=0)
             d_out = model(x_in, aux=aux_b)
 
+            def _keep(tgt_ch):
+                if satk_b is None:
+                    return None
+                chs = tgt_ch if isinstance(tgt_ch, (list, tuple)) else [tgt_ch]
+                return satk_b[:, chs].prod(dim=1, keepdim=True)
+
+            def _resid(dc, tc, tgt_ch, square=False):
+                """E1: one-sided residual where the target is clipped."""
+                r = (dc - tc).abs()
+                if cfg.sat_censored:
+                    keep = _keep(tgt_ch)
+                    if keep is not None:
+                        r = keep * r + (1.0 - keep) * torch.relu(tc - dc)
+                return r ** 2 if square else r
+
             def _wmean(t, tgt_ch, use_fid=False):
-                w = None
-                if satk_b is not None:
-                    chs = tgt_ch if isinstance(tgt_ch, (list, tuple)) else [tgt_ch]
-                    w = satk_b[:, chs].prod(dim=1, keepdim=True)
+                w = None if cfg.sat_censored else _keep(tgt_ch)
                 if use_fid and fid_b is not None:
                     w = fid_b if w is None else w * fid_b
                 if w is None:
                     return t.mean()
                 return (t * w).sum() / w.sum().clamp(min=1.0)
 
-            l_hh = _wmean((d_out[:, 0:1] - tgt[:, 0:1]).abs(), 0)
-            l_vv = _wmean((d_out[:, 3:4] - tgt[:, 3:4]).abs(), 3)
+            l_hh = _wmean(_resid(d_out[:, 0:1], tgt[:, 0:1], 0), 0)
+            l_vv = _wmean(_resid(d_out[:, 3:4], tgt[:, 3:4], 3), 3)
             loss_copol = (l_hh + l_vv) / 2
             t_x = tgt[:, 1:3]
             if cfg.xpol_target_debias > 0:                       # D1
@@ -358,17 +370,17 @@ def denoise_scene(patches, cfg: TrainConfig = None, crop: int = 256,
                 t_f = 0.5 * (t_x[:, 0:1] + t_x[:, 1:2])
                 if cfg.xpol_fused_loss == "l2":
                     t_f = t_f * _HN_MED_OVER_MEAN
-                    l_hv = _wmean((d_out[:, 1:2] - t_f) ** 2, [1, 2], True)
-                    l_vh = _wmean((d_out[:, 2:3] - t_f) ** 2, [1, 2], True)
+                    l_hv = _wmean(_resid(d_out[:, 1:2], t_f, [1, 2], square=True), [1, 2], True)
+                    l_vh = _wmean(_resid(d_out[:, 2:3], t_f, [1, 2], square=True), [1, 2], True)
                 else:
-                    l_hv = _wmean((d_out[:, 1:2] - t_f).abs(), [1, 2], True)
-                    l_vh = _wmean((d_out[:, 2:3] - t_f).abs(), [1, 2], True)
+                    l_hv = _wmean(_resid(d_out[:, 1:2], t_f, [1, 2]), [1, 2], True)
+                    l_vh = _wmean(_resid(d_out[:, 2:3], t_f, [1, 2]), [1, 2], True)
             else:
                 w_r = cfg.merlin_recip_weight
-                l_hv = ((1 - w_r) * _wmean((d_out[:, 1:2] - t_x[:, 0:1]).abs(), 1, True)
-                        + w_r * _wmean((d_out[:, 1:2] - t_x[:, 1:2]).abs(), 2, True))
-                l_vh = ((1 - w_r) * _wmean((d_out[:, 2:3] - t_x[:, 1:2]).abs(), 2, True)
-                        + w_r * _wmean((d_out[:, 2:3] - t_x[:, 0:1]).abs(), 1, True))
+                l_hv = ((1 - w_r) * _wmean(_resid(d_out[:, 1:2], t_x[:, 0:1], 1), 1, True)
+                        + w_r * _wmean(_resid(d_out[:, 1:2], t_x[:, 1:2], 2), 2, True))
+                l_vh = ((1 - w_r) * _wmean(_resid(d_out[:, 2:3], t_x[:, 1:2], 2), 2, True)
+                        + w_r * _wmean(_resid(d_out[:, 2:3], t_x[:, 0:1], 1), 1, True))
             loss_xpol = (l_hv + l_vh) / 2
         else:
             ar_b = stack("ar", crops)

@@ -243,6 +243,25 @@ class TrainConfig:
                                     # floor pixels y = x*S + n is not
                                     # multiplicative, so S is not Rayleigh
 
+    # ── Track E1: saturated (clipped) targets as CENSORED observations ──
+    sat_censored: bool = False      # E1: instead of DROPPING saturated
+                                    # target pixels from the MERLIN data
+                                    # term (`sat=`, which A4 measured at
+                                    # -1.6 dB), treat the clipped target as
+                                    # a LOWER BOUND: the residual becomes
+                                    # one-sided, relu(t - d) — the output is
+                                    # free to go above the clipping level
+                                    # but is still pulled up to it. A4's
+                                    # lesson was that a clipped target is a
+                                    # biased-but-informative bound, and that
+                                    # having no target at all lets the
+                                    # regularizers flatten bright structures
+    sat_tv_relax: float = 0.0       # E1: reduce the TV edge weights on
+                                    # saturated pixels by this factor
+                                    # (weights x (1 - r*sat)), so the
+                                    # smoothness prior stops fighting the
+                                    # one-sided term over the bright tail
+
     # Reporting
     snapshot_every: int = 100
 
@@ -395,6 +414,14 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                     span_g, alpha=cfg.guide_alpha,
                     cv_protect=cfg.guide_cv_protect or None)
         tv_weights = modulate_edge_weights(tv_weights, phase_factor)
+        if cfg.sat_tv_relax > 0 and sat_keep is not None:
+            # E1: over the clipped bright tail the target is only a lower
+            # bound, so the TV prior is the only two-sided force there —
+            # relax it or it flattens exactly the structures E1 is trying
+            # to keep. sat_keep is 1 where usable, 0 where saturated.
+            sat_any = (1.0 - sat_keep).amax(dim=1, keepdim=True)
+            tv_weights = modulate_edge_weights(
+                tv_weights, 1.0 - cfg.sat_tv_relax * sat_any)
         if cfg.phase_helix_protect > 0 and "helix" in pm:
             # D3: protect cross-pol structure only (channels 1, 2) — a
             # protection map, not a smoothing reduction: flats unchanged
@@ -541,6 +568,9 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             ri_msg += (f" PH(b={cfg.phase_smooth_boost},"
                        f"s={cfg.phase_surface_boost},p={cfg.phase_protect},"
                        f"f={cfg.phase_fidelity})")
+        if cfg.sat_censored or cfg.sat_tv_relax > 0:
+            ri_msg += (f" E1(censored={cfg.sat_censored},"
+                       f"tv_relax={cfg.sat_tv_relax})")
         if (cfg.xpol_fused_target or cfg.xpol_target_debias > 0
                 or cfg.phase_helix_protect > 0 or cfg.fact_snr_gate > 0
                 or aux_in is not None):
@@ -604,20 +634,37 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 # Weighted mean over usable pixels: excludes saturated
                 # TARGET pixels (sat_keep of the target channel) and, on
                 # cross-pol, applies the mean-1 phase fidelity weight.
+                def _keep(tgt_ch):
+                    if sat_keep is None:
+                        return None
+                    chs = tgt_ch if isinstance(tgt_ch, (list, tuple)) else [tgt_ch]
+                    return sat_keep[:, chs].prod(dim=1, keepdim=True)
+
                 def _wmean(t, tgt_ch, use_fid=False):
-                    w = None
-                    if sat_keep is not None:
-                        chs = tgt_ch if isinstance(tgt_ch, (list, tuple)) else [tgt_ch]
-                        w = sat_keep[:, chs].prod(dim=1, keepdim=True)
+                    # E1: with sat_censored the saturated pixels stay IN the
+                    # mean (the residual itself is one-sided there), so no
+                    # saturation weight is applied here.
+                    w = None if cfg.sat_censored else _keep(tgt_ch)
                     if use_fid and fid_w is not None:
                         w = fid_w if w is None else w * fid_w
                     if w is None:
                         return t.mean()
                     return (t * w).sum() / w.sum().clamp(min=1.0)
 
+                def _resid(dc, tc, tgt_ch, square=False):
+                    """L1 (or squared) residual, CENSORED where the target is
+                    clipped: there the target is only a lower bound, so the
+                    penalty is one-sided — relu(t - d) instead of |d - t|."""
+                    r = (dc - tc).abs()
+                    if cfg.sat_censored:
+                        keep = _keep(tgt_ch)
+                        if keep is not None:
+                            r = keep * r + (1.0 - keep) * torch.relu(tc - dc)
+                    return r ** 2 if square else r
+
                 # Co-pol: full-pixel L1 N2N vs. the opposite component
-                l_hh = _wmean((d[:, 0:1] - tgt[:, 0:1]).abs(), 0)
-                l_vv = _wmean((d[:, 3:4] - tgt[:, 3:4]).abs(), 3)
+                l_hh = _wmean(_resid(d[:, 0:1], tgt[:, 0:1], 0), 0)
+                l_vv = _wmean(_resid(d[:, 3:4], tgt[:, 3:4], 3), 3)
                 loss_copol = (l_hh + l_vv) / 2
 
                 # Cross-pol targets (opposite component; independent of
@@ -635,21 +682,21 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                     t_f = 0.5 * (t_x[:, 0:1] + t_x[:, 1:2])
                     if cfg.xpol_fused_loss == "l2":
                         t_f = t_f * _HN_MED_OVER_MEAN
-                        l_hv = _wmean((d[:, 1:2] - t_f) ** 2, [1, 2], True)
-                        l_vh = _wmean((d[:, 2:3] - t_f) ** 2, [1, 2], True)
+                        l_hv = _wmean(_resid(d[:, 1:2], t_f, [1, 2], square=True), [1, 2], True)
+                        l_vh = _wmean(_resid(d[:, 2:3], t_f, [1, 2], square=True), [1, 2], True)
                     else:
-                        l_hv = _wmean((d[:, 1:2] - t_f).abs(), [1, 2], True)
-                        l_vh = _wmean((d[:, 2:3] - t_f).abs(), [1, 2], True)
+                        l_hv = _wmean(_resid(d[:, 1:2], t_f, [1, 2]), [1, 2], True)
+                        l_vh = _wmean(_resid(d[:, 2:3], t_f, [1, 2]), [1, 2], True)
                 else:
                     # own channel + (reciprocity) the reciprocal channel,
                     # mixed at the LOSS level. With phase feedback, pixels
                     # whose observation is noise-dominated (low HV-VH
                     # phase coherence) contribute less to the data term.
                     w_r = cfg.merlin_recip_weight
-                    l_hv = ((1 - w_r) * _wmean((d[:, 1:2] - t_x[:, 0:1]).abs(), 1, True)
-                            + w_r * _wmean((d[:, 1:2] - t_x[:, 1:2]).abs(), 2, True))
-                    l_vh = ((1 - w_r) * _wmean((d[:, 2:3] - t_x[:, 1:2]).abs(), 2, True)
-                            + w_r * _wmean((d[:, 2:3] - t_x[:, 0:1]).abs(), 1, True))
+                    l_hv = ((1 - w_r) * _wmean(_resid(d[:, 1:2], t_x[:, 0:1], 1), 1, True)
+                            + w_r * _wmean(_resid(d[:, 1:2], t_x[:, 1:2], 2), 2, True))
+                    l_vh = ((1 - w_r) * _wmean(_resid(d[:, 2:3], t_x[:, 1:2], 2), 2, True)
+                            + w_r * _wmean(_resid(d[:, 2:3], t_x[:, 0:1], 1), 1, True))
                 loss_xpol = (l_hv + l_vh) / 2
         else:
             m = masker(noisy_t)

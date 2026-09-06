@@ -215,3 +215,11 @@ SLC girdisi (`load_quadpol_slc(amp_npy=...)` + `denoise(slc=)`) gercek yamada ba
 (3) sekillendirilmis-benek GT protokolu (bundan sonra beyaz benek KULLANILMAYACAK). Acik sorun: korelasyonlu
 benegin dusuk-frekans kismi ciktiya emiliyor (kontrol oran gorntusu girdi lag-1'in %86'sini tutuyor);
 beyazlatma (W1) ve alt-bakis N2N (W2) bunu cozmedi. W3 (CPD/koherans haritalari NLM ozelligi) denenmedi.
+
+**KALINAN NOKTA (2026-09-06 session sonu, kullanici: "not edelim birakalim simdilik"):** Track W park edildi.
+Faz farklari piksel bazinda benek gidermeye ~0.3 dB'den fazla katki veremez (Fisher tavani: HV-VH 2.11/1.98,
+HH-VV 1.07/1.00) — kusursuz C3/T3 Wishart terimi bile bunu asamaz; tez icin savunulabilir ifade. Acik kalan iki
+faz kullanimi: W3 (CPD/koherans haritalari NLM gruplama ozelligi; dusuk beklenti, ~8 dk kosu) ve polarimetrik
+cikti (kovaryans matrisini gidermek; tez kapsami karari). Genlik icin kalan kaldiraclar fazda degil: kirpma
+(cozuldu: `denoise(slc=)` + kirpilmamis SLC), korelasyonlu benegin dusuk-frekans emilimi (acik), Track B verisi.
+Sonraki oturum: W3 / polarimetrik cikti / Track B karari. Her GT iddiasi sekillendirilmis-benek fantomla.

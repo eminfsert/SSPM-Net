@@ -478,6 +478,30 @@ speckle information? Measured (plan + numbers in
 - **Protocol upgrade:** every future GT number should use the shaped-speckle
   phantom (`make_phantom_slc(clean, sigma_n, transfer=Hf)`), not the white
   one — white speckle cannot show the correlated-speckle absorption.
+
+**Where phase differences stand (user decision 2026-09-06: noted, parked).**
+Per-pixel, inter-channel phase cannot buy more than ~0.3 dB on this data —
+a Fisher-information ceiling, not an experimental miss: complex/amplitude
+information ratio 2.11/1.98 for HV-VH (coherence 0.83) and 1.07/1.00 for
+HH-VV (coherence 0.35), i.e. even a perfect C3/T3 Wishart data term tops out
+at ~0.3 dB on the amplitude channels. Two uses remain open, untried:
+(1) **W3** — HH-VV CPD / |gamma| maps as a non-local GROUPING feature
+(scene information the amplitudes lack, R^2 0.10; not bounded by the
+ceiling because it changes which pixels are averaged, not per-pixel
+information; expectation low; ~20 min code + one 8 min run);
+(2) **polarimetric output** — despeckle the covariance matrix itself
+(coherence, CPD, H/A/alpha), the only denoising problem in which the phase
+differences are the target; the shaped-speckle phantom can score it with a
+controllable HH-VV coherence. Larger scope; a thesis-scope decision.
+Remaining measured levers for amplitude quality are NOT in the phase:
+clipping (solved by the unclipped SLC input), low-frequency absorption of
+correlated speckle (open; likely a low-frequency regularisation question),
+and Track B's ~16 scene patches (more data).
+
+**RESUME POINT:** Track W parked. Next session: decide W3 vs polarimetric
+output vs Track B (if the scene patches arrive). Use `denoise(slc=...)` with
+the unclipped SLC as the base for any complex-data work, and the
+shaped-speckle GT (`run_track_w_gt.py` pattern) for any GT claim.
 - Code: `sspmnet/spectral.py`, `load_quadpol_slc`, `denoise(slc=)`,
   `phase_feedback_maps` single-angle on both paths (`load_quadpol_phase`
   now returns the full 2*pi range).

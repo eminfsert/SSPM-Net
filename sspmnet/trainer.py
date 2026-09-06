@@ -256,6 +256,16 @@ class TrainConfig:
                                     # biased-but-informative bound, and that
                                     # having no target at all lets the
                                     # regularizers flatten bright structures
+    sublook_n2n: float = 0.0        # W2: >0 with ``slc=``: every other
+                                    # MERLIN step uses the SUB-LOOK pair
+                                    # (|Re A|, |Im B| of the two disjoint
+                                    # half-bands, sspmnet.spectral.sublooks)
+                                    # as input/target — their speckle is
+                                    # independent (unlike HV/VH or the
+                                    # neighbours of an oversampled pixel).
+                                    # Value = weight of that step's data term.
+    sublook_axis: int = -1          # W2: axis to split (-1 = columns, the
+                                    # more oversampled one on this patch)
     sat_tv_relax: float = 0.0       # E1: reduce the TV edge weights on
                                     # saturated pixels by this factor
                                     # (weights x (1 - r*sat)), so the
@@ -389,6 +399,16 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                 # per-channel 2-look reference, lightly smoothed
                 nl_ref = _box_blur(0.5 * (ar_t + ai_t), k=3, passes=1)
     merlin = ri_pair is not None and cfg.ri_mode == "merlin"
+
+    # ── W2: sub-look Noise2Noise pair from the complex SLC ──
+    sub_t = None
+    if merlin and slc is not None and cfg.sublook_n2n > 0:
+        from .spectral import sublooks
+        from .complex_data import _L1_RATIO
+        A_s, B_s = sublooks(slc, axis=cfg.sublook_axis)
+        sub_pair = _L1_RATIO * np.stack([np.abs(A_s.real), np.abs(B_s.imag)])
+        sub_norm = np.clip(sub_pair / np.maximum(q99[None], 1e-9), 0.0, 5.0)
+        sub_t = torch.from_numpy(sub_norm.astype(np.float32)).to(device)
 
     # ── Phase feedback maps: per-pixel noise/structure evidence from the
     #    folded quad-pol phase (see sspmnet.phase_data) ──
@@ -585,6 +605,8 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             ri_msg += (f" PH(b={cfg.phase_smooth_boost},"
                        f"s={cfg.phase_surface_boost},p={cfg.phase_protect},"
                        f"f={cfg.phase_fidelity})")
+        if sub_t is not None:
+            ri_msg += f" W2(sublook={cfg.sublook_n2n},axis={cfg.sublook_axis})"
         if cfg.sat_censored or cfg.sat_tv_relax > 0:
             ri_msg += (f" E1(censored={cfg.sat_censored},"
                        f"tv_relax={cfg.sat_tv_relax})")
@@ -618,8 +640,13 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
             #    component's pseudo-amplitude, the target is the OTHER, so
             #    the input carries none of the target's noise and EVERY
             #    pixel supervises (no masking needed). ──
-            k = step % 2
-            x_in, tgt = ri_t[k:k + 1], ri_t[1 - k:2 - k]
+            sub_step = sub_t is not None and step % 2 == 1
+            if sub_step:
+                k = (step // 2) % 2
+                x_in, tgt = sub_t[k:k + 1], sub_t[1 - k:2 - k]
+            else:
+                k = (step // 2) % 2 if sub_t is not None else step % 2
+                x_in, tgt = ri_t[k:k + 1], ri_t[1 - k:2 - k]
             d = model(x_in, aux=aux_in)
 
             if cfg.merlin_loss == "nll":
@@ -715,6 +742,9 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
                     l_vh = ((1 - w_r) * _wmean(_resid(d[:, 2:3], t_x[:, 1:2], 2), 2, True)
                             + w_r * _wmean(_resid(d[:, 2:3], t_x[:, 0:1], 1), 1, True))
                 loss_xpol = (l_hv + l_vh) / 2
+            if sub_step:
+                loss_copol = loss_copol * cfg.sublook_n2n
+                loss_xpol = loss_xpol * cfg.sublook_n2n
         else:
             m = masker(noisy_t)
             d = model(m["masked_input"], aux=aux_in)

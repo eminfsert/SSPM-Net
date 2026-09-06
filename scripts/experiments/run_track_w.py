@@ -84,6 +84,22 @@ dw = cached("trkw_real_flatdecim_v2.npy", lambda: denoise(
 runs["flat+decim"] = (dw, np.abs(zw).astype(np.float64) ** 2,
                       spectral.unwhiten_amp(dw, info))
 
+# ── W2: sub-look Noise2Noise on the 512 grid (centred, unclipped SLC; no
+#    flattening, no decimation).  --control adds the same SLC without the
+#    sub-look term, to separate "unclipped centred SLC" from "sub-look N2N".
+slc_c, _ = spectral.centre_spectrum(slc)
+if "--control" in sys.argv:
+    print("\n=== slc512 (control) ===", flush=True)
+    dc = cached("trkw_real_slc512.npy", lambda: denoise(
+        None, TrainConfig(**STACK, whiteness_lags=(3, 4, 5)),
+        slc=slc_c)["denoised"]).astype(np.float64)
+    runs["slc512"] = (dc, np.abs(slc_c).astype(np.float64) ** 2, dc)
+print("\n=== slc512+sublook ===", flush=True)
+ds_ = cached("trkw_real_slc512_sub.npy", lambda: denoise(
+    None, TrainConfig(**STACK, whiteness_lags=(3, 4, 5), sublook_n2n=1.0),
+    slc=slc_c)["denoised"]).astype(np.float64)
+runs["slc512+sub"] = (ds_, np.abs(slc_c).astype(np.float64) ** 2, ds_)
+
 
 # ── metrics ──
 def scale_match(x, ref):
@@ -176,7 +192,8 @@ wy, wx, ws = 180, 408, 32
 ims = [("Noisy", amp.astype(np.float64))] + [
     (n, scale_match(r[2], amp.astype(np.float64))) for n, r in runs.items()]
 fig, axes = plt.subplots(4, len(ims), figsize=(3.8 * len(ims), 14.5))
-nat = [n256, b256, dw]                     # native-256 counterparts of ims
+nat = [n256, b256, dw] + [runs[n][2].reshape(4, 256, 2, 256, 2).mean((2, 4))
+                          for n in runs if n not in ("base", "flat+decim")]
 vmax = np.quantile(amp[1], 0.99)
 wmax = 3.0 * np.median(ims[1][1][1][wy:wy + ws, wx:wx + ws])
 for col, (nm, im_) in enumerate(ims):

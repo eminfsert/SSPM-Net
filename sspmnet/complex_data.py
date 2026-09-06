@@ -161,6 +161,61 @@ def load_quadpol_tiffs(tiff_dir: str, prefix: str = None,
     return amp, ri_pair
 
 
+def load_quadpol_slc(tiff_dir: str, prefix: str = None, amp_npy=None,
+                     return_sat: bool = False):
+    """Recover the complex quad-pol SLC from the amplitude and phase files.
+
+    The ``*_pha.tiff`` files carry the FULL-RANGE [0, 2*pi) SLC phase
+    (``phi = u8/255 * 2*pi``; verified: reconstructs |Re|,|Im| at corr 0.996,
+    quadrants uniformly occupied).  ``S = amp * exp(1j*phi)``.
+
+    Parameters
+    ----------
+    amp_npy : str | np.ndarray (4, H, W) | None
+        Full-range amplitude of the SAME pixels (e.g. ``data/example_quadpol.npy``).
+        When given, the amplitude is taken from it and brought onto the uint8
+        scale with the per-channel median ratio over unsaturated pixels — this
+        removes the 255 clipping (28% out-of-band spectral power on the
+        clipped TIFF SLC vs 2.5% unclipped), which spectral processing needs.
+        The ``pha`` files are unaffected by clipping.
+
+    Returns
+    -------
+    slc : np.ndarray (4, H, W) complex64  [HH, HV, VH, VV], amplitude on the
+        uint8 file scale; plus ``sat`` (4, H, W) bool if ``return_sat``.
+    """
+    if prefix is None:
+        cands = sorted(glob.glob(os.path.join(tiff_dir, "*hh_amp.tiff")))
+        if not cands:
+            raise FileNotFoundError(f"no '*hh_amp.tiff' found in {tiff_dir}")
+        base = os.path.basename(cands[0])
+        prefix = base[: base.index("hh_amp.tiff")]
+
+    def load(comp):
+        return np.stack([
+            _read_tiff(os.path.join(tiff_dir, f"{prefix}{pol}_{comp}.tiff"))
+            for pol in POLS
+        ])
+
+    amp8 = load("amp")
+    phi = load("pha") / 255.0 * (2.0 * np.pi)
+    sat = amp8 >= 255.0
+    amp = amp8.astype(np.float64)
+    if amp_npy is not None:
+        full = np.load(amp_npy) if isinstance(amp_npy, str) else np.asarray(amp_npy)
+        full = full.astype(np.float64)
+        if full.shape != amp8.shape:
+            raise ValueError(f"amp_npy shape {full.shape} != tiff shape {amp8.shape}")
+        for c in range(4):
+            ok = (amp8[c] > 5) & (amp8[c] < 250) & (full[c] > 0)
+            scale = float(np.median(amp8[c][ok] / full[c][ok]))
+            amp[c] = full[c] * scale
+    slc = (amp * np.exp(1j * phi)).astype(np.complex64)
+    if return_sat:
+        return slc, sat
+    return slc
+
+
 def load_scene_patches(scene_dir: str, calibrate: str = "l1"):
     """Load every quad-pol patch found in ``scene_dir``.
 

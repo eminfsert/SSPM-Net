@@ -15,20 +15,20 @@ from .model import SSPMNet, SARDenoiser, DenoiseBranch, ChannelRefinement
 from .masking import QuadPolSpatialMasker, BernoulliMasker
 from .trainer import TrainConfig, denoise
 from .complex_data import (load_quadpol_tiffs, calibrate_ri,
-                           load_scene_patches)
+                           load_scene_patches, load_quadpol_slc)
 from .scene_trainer import denoise_scene
 from .phase_data import load_quadpol_phase, phase_feedback_maps
-from . import metrics, losses, complex_data, phase_data
+from . import metrics, losses, complex_data, phase_data, spectral
 
 __all__ = [
     "Config",
     "SSPMNet", "SARDenoiser", "DenoiseBranch", "ChannelRefinement",
     "QuadPolSpatialMasker", "BernoulliMasker",
     "TrainConfig", "denoise",
-    "load_quadpol_tiffs", "calibrate_ri",
+    "load_quadpol_tiffs", "calibrate_ri", "load_quadpol_slc",
     "load_scene_patches", "denoise_scene",
     "load_quadpol_phase", "phase_feedback_maps",
-    "metrics", "losses", "complex_data", "phase_data",
+    "metrics", "losses", "complex_data", "phase_data", "spectral",
 ]
 
 __version__ = "1.0.0"

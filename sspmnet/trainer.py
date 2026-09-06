@@ -273,7 +273,7 @@ def _resolve_device(name: str) -> torch.device:
 
 
 def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True,
-            ri_pair=None, pha=None, sat=None):
+            ri_pair=None, pha=None, sat=None, slc=None):
     """Zero-shot denoise one quad-pol amplitude image.
 
     Parameters
@@ -309,6 +309,12 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         255; from ``load_quadpol_tiffs(..., return_sat=True)``). Saturated
         pixels are excluded from the MERLIN L1 data term — their targets
         carry a truncated bright tail. Regularizers still cover them.
+    slc : np.ndarray (4, H, W) complex, optional
+        Complex SLC (e.g. from ``load_quadpol_slc`` or ``spectral.whiten``).
+        When given it defines the amplitude (``|slc|``; ``amp_4ch_raw`` may
+        be None), the MERLIN pair (``|Re|``, ``|Im|`` — already on the same
+        scale, no calibration) and, unless ``pha`` is passed, the phase maps
+        (``phase_feedback_maps(z=slc)``).
 
     Returns
     -------
@@ -326,6 +332,13 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(cfg.init_seed)
 
+    if slc is not None:
+        slc = np.asarray(slc, dtype=np.complex64)
+        amp_4ch_raw = np.abs(slc)
+        if ri_pair is None:
+            ri_pair = np.stack([np.abs(slc.real), np.abs(slc.imag)])
+        if pha is None:
+            pha = phase_feedback_maps(z=slc, win=cfg.phase_win)
     amp_4ch_raw = np.asarray(amp_4ch_raw, dtype=np.float32)
     H_d, W_d = amp_4ch_raw.shape[1], amp_4ch_raw.shape[2]
     q99 = np.quantile(amp_4ch_raw, 0.99, axis=(1, 2), keepdims=True)

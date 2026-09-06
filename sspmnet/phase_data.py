@@ -55,7 +55,12 @@ except ImportError:                                        # pragma: no cover
 
 
 def load_quadpol_phase(tiff_dir: str, prefix: str = None) -> np.ndarray:
-    """Load the folded quad-pol phase stack, scaled to [0, pi].
+    """Load the quad-pol phase stack, decoded to the full range [0, 2*pi).
+
+    (Until 2026-09-05 this returned ``u8*pi/255``; the files are full-range
+    SLC phase, and ``phase_feedback_maps`` used to double the angle, so the
+    maps are numerically unchanged — but ``z=`` callers now get the same
+    single-angle statistics as ``pha=`` callers.)
 
     Returns (4, H, W) float32 in channel order [HH, HV, VH, VV].
     """
@@ -69,7 +74,7 @@ def load_quadpol_phase(tiff_dir: str, prefix: str = None) -> np.ndarray:
         _read_tiff(os.path.join(tiff_dir, f"{prefix}{pol}_pha.tiff"))
         for pol in POLS
     ])
-    return (pha * (np.pi / 255.0)).astype(np.float32)
+    return (pha * (2.0 * np.pi / 255.0)).astype(np.float32)
 
 
 def _local_mean(x: np.ndarray, win: int) -> np.ndarray:
@@ -97,16 +102,13 @@ def phase_feedback_maps(pha: np.ndarray = None, win: int = 7,
 
     Parameters
     ----------
-    pha : (4, H, W) folded phase in [0, pi] (from :func:`load_quadpol_phase`).
+    pha : (4, H, W) full-range phase (from :func:`load_quadpol_phase`).
     win : odd int — local circular-statistics window.
     smooth : int — box size for lightly smoothing the coherence maps
         before normalization (the win-sized estimator is itself noisy);
         0/1 disables.
-    z : (4, H, W) complex, optional — when the true SLC is available
-        (synthetic validation), maps are computed from angle(z) directly;
-        the doubled angle makes the result IDENTICAL to what the folded
-        phase would give, so the synthetic test exercises the same code
-        path honestly.
+    z : (4, H, W) complex, optional — maps are computed from angle(z);
+        identical to passing ``pha=np.angle(z)`` (single angle, no doubling).
 
     Returns
     -------
@@ -120,8 +122,8 @@ def phase_feedback_maps(pha: np.ndarray = None, win: int = 7,
     if pha is None:
         if z is None:
             raise ValueError("give either pha or z")
-        pha = np.angle(z)          # doubled angle below folds identically
-    u = np.exp(2j * pha.astype(np.float64))
+        pha = np.angle(z)
+    u = np.exp(1j * pha.astype(np.float64))
 
     snr = _local_coherence(u[1] * np.conj(u[2]), win)
     surface = _local_coherence(u[0] * np.conj(u[3]), win)

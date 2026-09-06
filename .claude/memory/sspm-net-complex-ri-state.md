@@ -190,3 +190,5 @@ grain TAKASI, bedava kazanc degil.
 FANTOM UYARISI: tek bir bagimsiz referans, hakikat degil. Parlak kuyrugu 220 sivri nokta hedef ve E1 hukmunu
 bu karakter belirliyor. Her zaman gercek yamanin olcege-duyarsiz metrikleriyle BIRLIKTE okunmali.
 Tablo `docs/figures/metrics_indep_eval.txt`, figur `compare_indep_eval.png`.
+
+**RESUME (2026-09-06):** yeni Colab A100-40GB VM, repo /content/SSPM-Net'e yeniden klonlandi (main-only refspec, genisletildi), `feature/scene-scale-arch` 8296b60'ta checkout edildi. Memory `.claude/memory/` -> `/root/.claude/projects/-content/memory/` geri yuklendi. git user.name/email lokal olarak tez yazarina set edildi. torch 2.11.0+cu128, CUDA OK. `results/` ve `data/scene/` yok (beklenen). gh auth bu VM'de HENUZ YOK — push kullanicinin `gh auth login` + `gh auth setup-git` yapmasini bekliyor. Kullanici talimati: bu oturumda knob/Track E devam etmek yerine FARKLI BIR YONTEM denenecek (yontem kullanici tarafindan belirtilecek). Onceki kayitli resume noktasi (E2 log-domain) askida.

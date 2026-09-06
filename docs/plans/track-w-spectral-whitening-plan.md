@@ -1,6 +1,6 @@
 # Track W — phase-based speckle whitening (spectral pre-processing) + sub-look N2N
 
-Date: 2026-09-06. Branch `feature/scene-scale-arch`. Status: step 1 done, step 2 running.
+Date: 2026-09-06. Branch `feature/scene-scale-arch`. Status: CLOSED — W1 negative, W2 a smoothing trade on the shaped-speckle GT (see CLAUDE.md, Track W). Durable outcomes: the unclipped centred SLC input, the shaped-speckle GT protocol, the phase-difference analysis below.
 
 ## Question that started it
 

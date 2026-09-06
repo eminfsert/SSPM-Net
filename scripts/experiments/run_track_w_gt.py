@@ -175,12 +175,16 @@ ims = [("Clean", clean), ("Noisy (shaped)", noisy)] + [
     (n, scale_match(d, clean)) for n, d in runs.items()]
 uy, ux = np.argwhere(urban).min(axis=0)
 zs = 128
-wy, wx = np.argwhere(water)[len(np.argwhere(water)) // 2]
 ws = 32
-wy, wx = int(np.clip(wy - ws // 2, 0, 512 - ws)), int(np.clip(wx - ws // 2, 0, 512 - ws))
+# interior flat-band crop: a window whose pixels are ALL in the eroded flat mask
+from scipy.ndimage import uniform_filter as _uf
+full = _uf(water.astype(np.float64), ws) > 0.999
+cand = np.argwhere(full)
+wy, wx = cand[len(cand) // 2]
+wy, wx = int(wy - ws // 2), int(wx - ws // 2)
 fig, axes = plt.subplots(3, len(ims), figsize=(3.6 * len(ims), 11))
 vmax = np.quantile(clean[1], 0.99)
-wmax = 3.0 * float(clean[1][water].mean())
+wmax = 4.0 * float(np.median(np.abs(z[1])[water]))     # noisy-median based, so outputs are visible
 for col, (nm, im_) in enumerate(ims):
     v = np.clip(im_[1] / vmax, 0, 1)
     axes[0, col].imshow(v, cmap="gray", vmin=0, vmax=1)

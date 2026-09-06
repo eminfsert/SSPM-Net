@@ -206,3 +206,12 @@ waterCV -%19; ENLr(HV) 0.96->0.84 tek ters sutun. HENUZ bagimsiz GT'de dogrulanm
 BEYAZ benek simule ediyor, gercek transfer fonksiyonuyla sekillendirilmis benek eklenmeli (siradaki is,
 kullaniciya sorulacak; ~15-20 dk kosu). Tablo/figur docs/figures/metrics_track_w.txt, compare_track_w.png.
 Kullanici kurali: basit adimlar, >10 dk kosular icin once sor ([[short-experiments]]).
+
+**TRACK W KAPANIS (2026-09-06):** sekillendirilmis-benek fantom GT (`make_phantom_slc`, gercek transfer
+fonksiyonu, koherans 0.78 eslesmis) W2'yi DOGRULAMADI: dPSNR -0.05/-0.08 dB, EPI(HV) -0.011, ENL +%66,
+flatHP -%14 = yumusatma takasi, dogruluk kazanci degil; `sublook_n2n` default 0. Gunun kalici kazanimlari:
+(1) faz farki analizi (kanal-arasi = sahne/termal, benek bilgisi uzamsal fazda), (2) kirpilmamis merkezlenmis
+SLC girdisi (`load_quadpol_slc(amp_npy=...)` + `denoise(slc=)`) gercek yamada base'i her sutunda geciyor,
+(3) sekillendirilmis-benek GT protokolu (bundan sonra beyaz benek KULLANILMAYACAK). Acik sorun: korelasyonlu
+benegin dusuk-frekans kismi ciktiya emiliyor (kontrol oran gorntusu girdi lag-1'in %86'sini tutuyor);
+beyazlatma (W1) ve alt-bakis N2N (W2) bunu cozmedi. W3 (CPD/koherans haritalari NLM ozelligi) denenmedi.

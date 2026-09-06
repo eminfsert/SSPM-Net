@@ -460,11 +460,24 @@ speckle information? Measured (plan + numbers in
   MERLIN step uses |Re A|/|Im B| of the two disjoint half-bands) = POSITIVE
   vs its control at equal EPI**: ENL-ROI(HV) 0.99 -> 2.51, waterHP -32%,
   waterCV -19%, more of the correlated speckle left in the ratio image.
-  ENLr(HV) 0.96 -> 0.84 moves the wrong way. NOT yet validated on an
-  independent GT: the phantom protocol simulates WHITE speckle and must be
-  extended with the real transfer function (shaped speckle) first.
-  Table/figure: `docs/figures/metrics_track_w.txt`, `compare_track_w.png`;
-  script `scripts/experiments/run_track_w.py` (`--control`).
+  ENLr(HV) 0.96 -> 0.84 moves the wrong way.
+  **Independent GT (shaped speckle, `sspmnet/phantom.py::make_phantom_slc`
+  with the real transfer function, HV-VH coherence matched to 0.78,
+  simulated lag-1 0.54/0.39 vs real 0.62/0.48): W2 does NOT clear the bar** —
+  dPSNR -0.05/-0.08 dB (inside the 0.10 dB floor), EPI(HV) -0.011, SSIM
+  -0.002; ENL(HV) 0.58 -> 0.97 and flatHP -14%. A smoothing trade, not an
+  accuracy gain; the real-patch effect is the same trade amplified by scene
+  texture. The ratio-whiteness columns barely move, i.e. the extra
+  independent supervision does not stop the low-frequency part of the
+  correlated speckle from being absorbed (that absorption reproduces on the
+  GT: the control's ratio keeps 86% of the input lag-1, 52% of neighbour-R2).
+  `sublook_n2n` stays 0 by default.
+  Tables/figures: `docs/figures/metrics_track_w.txt`, `compare_track_w.png`,
+  `metrics_track_w_gt.txt`, `compare_track_w_gt.png`; scripts
+  `scripts/experiments/run_track_w.py` (`--control`), `run_track_w_gt.py`.
+- **Protocol upgrade:** every future GT number should use the shaped-speckle
+  phantom (`make_phantom_slc(clean, sigma_n, transfer=Hf)`), not the white
+  one — white speckle cannot show the correlated-speckle absorption.
 - Code: `sspmnet/spectral.py`, `load_quadpol_slc`, `denoise(slc=)`,
   `phase_feedback_maps` single-angle on both paths (`load_quadpol_phase`
   now returns the full 2*pi range).

@@ -1,0 +1,16 @@
+Track W independent GT, SHAPED speckle (real transfer function, HV-VH coherence matched to 0.781; simulated speckle lag1 0.54/0.39 vs real 0.62/0.48). All outputs LS scale-matched. flatHP = high-pass std of HV over the flat band (clean 65.6150); rLag1/rNeighR2 = ratio-image whiteness vs the input's (ideal: equal)
+  Method       PSNR(HH)   PSNR(HV)   SSIM(HH)   SSIM(HV)    EPI(HH)    EPI(HV)    ENL(HV) EPIurb(HV)   RMSEbrgt    brightR     flatHP      rLag1     inLag1   rNeighR2  inNeighR2
+  slc           35.0710    40.3231     0.9381     0.9559     0.6356     0.7678     0.5845     0.8105   808.4736     0.7216    24.2369     0.4011     0.4666     0.2901     0.5604
+  slc+sub       35.0213    40.2404     0.9362     0.9546     0.6085     0.7566     0.9720     0.8061   813.4053     0.7139    20.8774     0.4066     0.4666     0.2956     0.5604
+
+  W2 sub-look N2N vs control: dPSNR(HH) -0.050  dPSNR(HV) -0.083  dEPI(HV) -0.0113
+
+VERDICT (2026-09-06): W2 sub-look N2N does NOT clear the bar on the independent shaped-speckle GT.
+  dPSNR -0.05/-0.08 dB (inside the 0.10 dB single-seed floor), SSIM -0.002/-0.001, EPI(HV) -0.011,
+  bright-tail RMSE +0.6%, brightR 0.722 -> 0.714; ENL(HV) 0.58 -> 0.97 (+66%), flatHP 24.2 -> 20.9 (-14%).
+  => a smoothing trade (less flat grain, slightly softer structure), not an accuracy gain. The large
+  real-patch effect (ENL-ROI 2.5x, waterHP -32%) is the same trade amplified by real-scene texture.
+  The ratio-whiteness columns barely move (rLag1 0.401 -> 0.407): the extra independent supervision
+  does not stop the network from absorbing the low-frequency part of the correlated speckle.
+  Protocol note: with SHAPED speckle the control's ratio keeps only 86% of the input lag-1 (0.40/0.47)
+  and 52% of the neighbour-R2 (0.29/0.56) -- the absorption seen on the real patch reproduces on GT.

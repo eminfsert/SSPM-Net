@@ -123,3 +123,48 @@ def make_phantom(shape=(512, 512), seed=0, q99=None, return_masks=False):
         flat = _smooth(water.astype(np.float64), 5) > 0.999
         return out, {"flat": flat, "urban": urban, "point": pts}
     return out
+
+
+# ── complex SLC simulation with the REAL transfer function (Track W) ──────
+
+def _shape_field(w, Hf):
+    """Filter a (H, W) complex field with the (H, W) unshifted transfer magnitude."""
+    return np.fft.ifft2(np.fft.fft2(w) * Hf)
+
+
+def transfer_from_profiles(py, px):
+    """(H, W) unshifted transfer MAGNITUDE from fftshifted separable POWER
+    profiles (as returned by ``sspmnet.spectral.estimate_transfer``),
+    normalised so the mean power gain is 1."""
+    Hf = np.fft.ifftshift(np.sqrt(np.outer(py, px)))
+    return Hf / np.sqrt((Hf ** 2).mean())
+
+
+def make_phantom_slc(clean, sigma_n, seed=7, transfer=None):
+    """Simulate a (4, H, W) complex SLC from a clean amplitude phantom.
+
+    Physics: ``S = H * (sqrt(reflectivity) . w) + H * n`` where ``w`` is unit
+    white circular Gaussian speckle (HV and VH share it: reciprocity), ``n``
+    is i.i.d. thermal noise of std ``sigma_n`` per channel, and ``H`` is the
+    sensor transfer function (range/azimuth compression) applied to BOTH —
+    this is what makes real speckle spatially correlated (lag-1 ~0.6 on the
+    bundled patch). ``transfer=None`` gives white speckle (the old protocol).
+
+    Returns (4, H, W) complex128 with the amplitude on the ``clean`` scale.
+    """
+    clean = np.asarray(clean, dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    shp = clean[0].shape
+
+    def cn(sig):
+        return (rng.normal(0, sig / np.sqrt(2), shp)
+                + 1j * rng.normal(0, sig / np.sqrt(2), shp))
+
+    g = np.stack([cn(1.0) for _ in range(4)])
+    g[2] = g[1]
+    n = np.stack([cn(sigma_n) for _ in range(4)])
+    z = clean * g + n
+    if transfer is None:
+        return z
+    return np.stack([_shape_field(clean[c] * g[c], transfer)
+                     + _shape_field(n[c], transfer) for c in range(4)])

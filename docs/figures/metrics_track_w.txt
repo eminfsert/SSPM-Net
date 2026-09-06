@@ -1,21 +1,26 @@
-Track W real patch (512 grid; flat+decim output resampled from 256). rLag1/rNeighR2 = residual-speckle whiteness of the ratio image on the run's NATIVE grid, inLag1/inNeighR2 = the same for the noisy input on that grid (ideal: ratio == input, i.e. all speckle left in the ratio)
+Track W real patch (512 grid; flat+decim output resampled from 256). Noisy reference for EPI/ENLr/ENL-ROI/water = the UNCLIPPED amplitude |slc| for every row. rLag1/rNeighR2 = residual-speckle whiteness of the ratio image on the run's NATIVE grid, inLag1/inNeighR2 = the same for the noisy input on that grid (ideal: ratio == input, i.e. all speckle left in the ratio)
   Method          EPI(HH)    EPI(HV)   ENLr(HH)   ENLr(HV)ENL-ROI(HV)    waterHP    waterCV      rLag1     inLag1   rNeighR2  inNeighR2
-  base             0.6669     0.7204     0.8793     1.0511     1.1764     0.5616     0.0969     0.3049     0.5295     0.1792     0.2931
-  flat+decim       0.3397     0.3287     0.5172     0.6134     0.6431     0.4521     0.1416    -0.0055     0.2069     0.0008     0.1910
+  base             0.4229     0.4354     0.0582     0.1653     1.1180     0.6795     0.0969     0.3049     0.5295     0.1792     0.2931
+  flat+decim       0.5923     0.5955     0.3553     0.5821     3.8137     0.6195     0.1416    -0.0055     0.2069     0.0008     0.1910
+  slc512           0.7367     0.7178     0.6528     0.9598     0.9940     0.6270     0.0878     0.3423     0.5484     0.2356     0.5388
+  slc512+sub       0.7146     0.7176     0.5949     0.8379     2.5108     0.4256     0.0711     0.3843     0.5484     0.2811     0.5388
 
 Native 256 grid: base = 2x2 block mean of the 512 output vs its block-mean noisy; flat+decim vs the whitened noisy |z_w|. ENLr/EPI against each row's own noisy; waterCV over the 256 water mask; ENL-ROI on ROIs picked on |z_w|
   Method          EPI(HH)    EPI(HV)   ENLr(HH)   ENLr(HV)ENL-ROI(HV)    waterCV     out/in
   base             0.5527     0.5563     0.1028     0.2820     0.7573     0.0891     0.8039
   flat+decim       0.8128     0.8014     0.7281     0.9482     0.3847     0.1508     0.8610
 
-VERDICT (2026-09-06, W1 flat+decim, scale-corrected run): NEGATIVE on the real patch as configured.
-  + on its own 256 grid the whitened run scores EPI 0.81/0.80 (base 2x2-block 0.55), ENLr(HV) 0.95
-    (ideal 1) and its ratio image is white (rLag1 -0.006) -- but that whiteness is the failure:
-    the noisy whitened input still has lag-1 0.21 and the network absorbed ALL of it into the
-    output (low-frequency mottling, ENL-ROI(HV) 0.38 vs 0.76, waterCV 0.15 vs 0.09).
-  - visual: blurrier structures, round haloes around point targets (in-band flattening amplifies
-    the band edges where the transfer function is small -> sidelobes the network smooths into blobs).
-  - on the 512 grid (bicubic from 256) every metric is worse (EPI 0.34, ENL-ROI 0.64).
-  Base also absorbs part of the correlated speckle (ratio lag-1 0.30 vs input 0.53) -- the
-  underlying problem is real, this remedy is not. First run (uncorrected MERLIN target scale,
-  out/in 0.57) is superseded by this one.
+VERDICT (2026-09-06, four rows, common UNCLIPPED reference):
+  W1 flat+decim  : NEGATIVE. Its ratio image is white (rLag1 -0.006) because the network absorbed the
+                   residual lag-1 0.21 of the whitened input (low-frequency mottling: waterCV 0.142,
+                   blur + haloes around point targets from in-band flattening). ENL-ROI 3.8 is that blur.
+  slc512 control : the unclipped, spectrum-centred SLC input ALONE beats the clipped-TIFF base on every
+                   column (EPI 0.42/0.44 -> 0.74/0.72, ENLr(HV) 0.17 -> 0.96, waterCV 0.097 -> 0.088,
+                   ENL-ROI equal). Base's bright blocks are flat saturated blobs; the SLC rows show the
+                   structure inside them. Track E2's "full-range data" premise, validated for free.
+  W2 slc512+sub  : POSITIVE vs its control at equal edge fidelity (EPI 0.72 == 0.72): ENL-ROI(HV)
+                   0.99 -> 2.51, waterHP 0.63 -> 0.43 (-32%), waterCV 0.088 -> 0.071 (-19%), and the
+                   ratio image keeps MORE of the input's correlated speckle (rLag1 62% -> 70% of input,
+                   rNeighR2 44% -> 52%), i.e. less correlated speckle copied into the output -- the
+                   intended mechanism. ENLr(HV) 0.96 -> 0.84 is the one column that moves the wrong way.
+  Not yet validated against an independent ground truth (needs the phantom with SHAPED speckle).

@@ -428,6 +428,47 @@ ENL-ROI >= +50% at equal EPI.
 scattering); obtain signed float SLC; decide on merging the feature
 branch; Track B awaits the user's ~16 scene patches in `data/scene/`.
 
+## Track W — phase differences answered; spectral whitening / sub-look N2N (2026-09-06)
+
+Question: 4 phases -> 3 phase DIFFERENCES; what do they mean, do they carry
+speckle information? Measured (plan + numbers in
+`docs/plans/track-w-spectral-whitening-plan.md`):
+
+- **Inter-channel differences carry NO usable speckle information.** Speckle
+  (the random scatterer arrangement) is common to all channels and CANCELS in
+  a phase difference; what remains is thermal noise (HV-VH, coherence 0.77)
+  and the scattering mechanism (HH-VV CPD bimodal at +-180 on bright
+  pixels; HH-HV helix rising with brightness). Fisher analysis: the complex
+  HV/VH pair gives only 11% more information about the clean intensity than
+  the amplitude pair, which the pipeline already uses. HH-VV / HH-HV maps are
+  genuine SCENE descriptors not in the amplitudes (R^2 0.10-0.14) -> W3
+  (NLM similarity feature), not done.
+- **The speckle information is in the SPATIAL phase (complex spectrum).** The
+  SLC fills ~50% of Nyquist (2x oversampling): lag-1 normalised-speckle
+  correlation 0.60; 27% (tiff) / 55% (unclipped) of a pixel's log-speckle is
+  linearly predictable from its 8 neighbours — a direct violation of the
+  blind-spot independence assumption. Spectrum centroid +0.022 cyc/px makes
+  corr(Re, Im_neighbour) = 0.09 (MERLIN leak); centring fixes it.
+  uint8 clipping puts 28% of the power out of band (unclipped npy SLC: 2.5%).
+- **W1 spectral whitening (flatten + 2x decimate) = NEGATIVE**: the residual
+  lag-1 0.21 is absorbed wholesale into the output (mottling, blur, haloes).
+- **Unclipped centred SLC input alone (`load_quadpol_slc(...,
+  amp_npy="data/example_quadpol.npy")` + `denoise(slc=)`) beats the clipped
+  TIFF base on every real-patch column** (EPI 0.42/0.44 -> 0.74/0.72,
+  ENLr(HV) 0.17 -> 0.96, waterCV 0.097 -> 0.088). New base for complex work.
+- **W2 sub-look Noise2Noise (`TrainConfig.sublook_n2n=1.0`, every other
+  MERLIN step uses |Re A|/|Im B| of the two disjoint half-bands) = POSITIVE
+  vs its control at equal EPI**: ENL-ROI(HV) 0.99 -> 2.51, waterHP -32%,
+  waterCV -19%, more of the correlated speckle left in the ratio image.
+  ENLr(HV) 0.96 -> 0.84 moves the wrong way. NOT yet validated on an
+  independent GT: the phantom protocol simulates WHITE speckle and must be
+  extended with the real transfer function (shaped speckle) first.
+  Table/figure: `docs/figures/metrics_track_w.txt`, `compare_track_w.png`;
+  script `scripts/experiments/run_track_w.py` (`--control`).
+- Code: `sspmnet/spectral.py`, `load_quadpol_slc`, `denoise(slc=)`,
+  `phase_feedback_maps` single-angle on both paths (`load_quadpol_phase`
+  now returns the full 2*pi range).
+
 ## Claude memory restore
 
 Copies of the persistent memory files live in `.claude/memory/`. On a fresh

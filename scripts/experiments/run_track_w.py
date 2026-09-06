@@ -101,7 +101,13 @@ ds_ = cached("trkw_real_slc512_sub.npy", lambda: denoise(
 runs["slc512+sub"] = (ds_, np.abs(slc_c).astype(np.float64) ** 2, ds_)
 
 
-# ── metrics ──
+# ── metrics: ONE common noisy reference for every row = the unclipped
+#    amplitude |slc| (npy on the uint8 scale). The tiff amplitude clips the
+#    top ~7% of pixels, which distorts EPI/ENL-ROI for outputs trained on the
+#    unclipped data (bright targets 10x brighter than the clipped reference). ──
+REF = np.abs(slc).astype(np.float64)
+
+
 def scale_match(x, ref):
     out = x.copy()
     for c in range(x.shape[0]):
@@ -111,8 +117,8 @@ def scale_match(x, ref):
 
 def ratio_enl(d512, c):
     eps = 1e-3
-    rI = (amp[c].astype(np.float64) ** 2 + eps) / (d512[c] ** 2 + eps)
-    v = rI[(d512[c] > 2) & (amp[c] > 0)]
+    rI = (REF[c] ** 2 + eps) / (d512[c] ** 2 + eps)
+    v = rI[(d512[c] > 2) & (REF[c] > 0)]
     return (v.mean() / v.std()) ** 2
 
 
@@ -129,11 +135,12 @@ def ratio_whiteness(out_native, noisy_I, c=1):
     return 0.5 * (w["lag1_x"] + w["lag1_y"]), 0.5 * (w0["lag1_x"] + w0["lag1_y"]), w["neigh_r2"], w0["neigh_r2"]
 
 
-rois_r, rs_r = find_top_k_rois(amp[1].astype(np.float64))
+rois_r, rs_r = find_top_k_rois(REF[1])
 cols = ["EPI(HH)", "EPI(HV)", "ENLr(HH)", "ENLr(HV)", "ENL-ROI(HV)",
         "waterHP", "waterCV", "rLag1", "inLag1", "rNeighR2", "inNeighR2"]
 W = 11
-title = ("Track W real patch (512 grid; flat+decim output resampled from 256). "
+title = ("Track W real patch (512 grid; flat+decim output resampled from 256). Noisy reference for "
+         "EPI/ENLr/ENL-ROI/water = the UNCLIPPED amplitude |slc| for every row. "
          "rLag1/rNeighR2 = residual-speckle whiteness of the ratio image on the run's "
          "NATIVE grid, inLag1/inNeighR2 = the same for the noisy input on that grid "
          "(ideal: ratio == input, i.e. all speckle left in the ratio)")
@@ -142,11 +149,11 @@ lines = [title, hdr]
 print("\n" + title)
 print(hdr)
 for name, (dn, nI, d512) in runs.items():
-    ds = scale_match(d512, amp.astype(np.float64))
+    ds = scale_match(d512, REF)
     g = grain(ds)
     rw = ratio_whiteness(dn, nI)
-    vals = [epi_metric(amp[0].astype(np.float64), d512[0]),
-            epi_metric(amp[1].astype(np.float64), d512[1]),
+    vals = [epi_metric(REF[0], d512[0]),
+            epi_metric(REF[1], d512[1]),
             ratio_enl(d512, 0), ratio_enl(d512, 1),
             enl_roi_multi(d512[1], rois_r, rs_r),
             g[0], g[1], rw[0], rw[1], rw[2], rw[3]]
@@ -189,12 +196,11 @@ import matplotlib.pyplot as plt
 
 zy, zx, zs = 180, 260, 160
 wy, wx, ws = 180, 408, 32
-ims = [("Noisy", amp.astype(np.float64))] + [
-    (n, scale_match(r[2], amp.astype(np.float64))) for n, r in runs.items()]
+ims = [("Noisy", REF)] + [(n, scale_match(r[2], REF)) for n, r in runs.items()]
 fig, axes = plt.subplots(4, len(ims), figsize=(3.8 * len(ims), 14.5))
 nat = [n256, b256, dw] + [runs[n][2].reshape(4, 256, 2, 256, 2).mean((2, 4))
                           for n in runs if n not in ("base", "flat+decim")]
-vmax = np.quantile(amp[1], 0.99)
+vmax = np.quantile(REF[1], 0.99)
 wmax = 3.0 * np.median(ims[1][1][1][wy:wy + ws, wx:wx + ws])
 for col, (nm, im_) in enumerate(ims):
     v = np.clip(im_[1] / vmax, 0, 1)

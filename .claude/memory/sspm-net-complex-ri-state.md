@@ -192,3 +192,17 @@ bu karakter belirliyor. Her zaman gercek yamanin olcege-duyarsiz metrikleriyle B
 Tablo `docs/figures/metrics_indep_eval.txt`, figur `compare_indep_eval.png`.
 
 **RESUME (2026-09-06):** yeni Colab A100-40GB VM, repo /content/SSPM-Net'e yeniden klonlandi (main-only refspec, genisletildi), `feature/scene-scale-arch` 8296b60'ta checkout edildi. Memory `.claude/memory/` -> `/root/.claude/projects/-content/memory/` geri yuklendi. git user.name/email lokal olarak tez yazarina set edildi. torch 2.11.0+cu128, CUDA OK. `results/` ve `data/scene/` yok (beklenen). gh auth bu VM'de HENUZ YOK — push kullanicinin `gh auth login` + `gh auth setup-git` yapmasini bekliyor. Kullanici talimati: bu oturumda knob/Track E devam etmek yerine FARKLI BIR YONTEM denenecek (yontem kullanici tarafindan belirtilecek). Onceki kayitli resume noktasi (E2 log-domain) askida.
+
+**TRACK W (2026-09-06) — faz farki sorusu cevaplandi + alt-bakis N2N POZITIF.** Kanal-arasi faz farklari
+benek bilgisi TASIMIYOR (benek tum kanallarda ortak, farkta sadelesir; kalan = termal (HV-VH) ve sacilma
+mekanizmasi (HH-VV, HH-HV) = sahne tanimlayicisi, W3 icin). Benek bilgisi UZAMSAL fazda: SLC 2x oversampled,
+lag-1 benek korelasyonu 0.60, pikselin log-beneginin %27-55'i komsulardan tahmin edilebilir (kor-nokta
+varsayimi ihlali). W1 spektral beyazlatma (duzlestir+2x desimasyon) NEGATIF (kalan 0.21 korelasyon ciktiya
+gecti, bulaniklik, hale). BULGU: kirpilmamis merkezlenmis SLC girdisi (`load_quadpol_slc(amp_npy=npy)` +
+`denoise(slc=)`) tek basina base'i her metrikte geciyor (EPI 0.42->0.74, ENLr(HV) 0.17->0.96) — E2'nin
+"tam aralikli veri" onculu bedavaya dogrulandi. W2 `TrainConfig.sublook_n2n=1.0` (her ikinci MERLIN adimi
+ayrik yari-bant |Re A|/|Im B| cifti) kontrolune gore esit EPI'de ENL-ROI(HV) 0.99->2.51, waterHP -%32,
+waterCV -%19; ENLr(HV) 0.96->0.84 tek ters sutun. HENUZ bagimsiz GT'de dogrulanmadi: fantom protokolu
+BEYAZ benek simule ediyor, gercek transfer fonksiyonuyla sekillendirilmis benek eklenmeli (siradaki is,
+kullaniciya sorulacak; ~15-20 dk kosu). Tablo/figur docs/figures/metrics_track_w.txt, compare_track_w.png.
+Kullanici kurali: basit adimlar, >10 dk kosular icin once sor ([[short-experiments]]).

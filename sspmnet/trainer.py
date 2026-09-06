@@ -336,7 +336,11 @@ def denoise(amp_4ch_raw, cfg: TrainConfig = None, on_snapshot=None, verbose=True
         slc = np.asarray(slc, dtype=np.complex64)
         amp_4ch_raw = np.abs(slc)
         if ri_pair is None:
-            ri_pair = np.stack([np.abs(slc.real), np.abs(slc.imag)])
+            # same convention as calibrate_ri: half-normal |Re|,|Im| scaled by
+            # the Rayleigh/half-normal median ratio so the L1 (median) fit of
+            # the MERLIN targets lands on the amplitude scale
+            from .complex_data import _L1_RATIO
+            ri_pair = _L1_RATIO * np.stack([np.abs(slc.real), np.abs(slc.imag)])
         if pha is None:
             pha = phase_feedback_maps(z=slc, win=cfg.phase_win)
     amp_4ch_raw = np.asarray(amp_4ch_raw, dtype=np.float32)

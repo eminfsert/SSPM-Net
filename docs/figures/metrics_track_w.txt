@@ -1,0 +1,21 @@
+Track W real patch (512 grid; flat+decim output resampled from 256). rLag1/rNeighR2 = residual-speckle whiteness of the ratio image on the run's NATIVE grid, inLag1/inNeighR2 = the same for the noisy input on that grid (ideal: ratio == input, i.e. all speckle left in the ratio)
+  Method          EPI(HH)    EPI(HV)   ENLr(HH)   ENLr(HV)ENL-ROI(HV)    waterHP    waterCV      rLag1     inLag1   rNeighR2  inNeighR2
+  base             0.6669     0.7204     0.8793     1.0511     1.1764     0.5616     0.0969     0.3049     0.5295     0.1792     0.2931
+  flat+decim       0.3397     0.3287     0.5172     0.6134     0.6431     0.4521     0.1416    -0.0055     0.2069     0.0008     0.1910
+
+Native 256 grid: base = 2x2 block mean of the 512 output vs its block-mean noisy; flat+decim vs the whitened noisy |z_w|. ENLr/EPI against each row's own noisy; waterCV over the 256 water mask; ENL-ROI on ROIs picked on |z_w|
+  Method          EPI(HH)    EPI(HV)   ENLr(HH)   ENLr(HV)ENL-ROI(HV)    waterCV     out/in
+  base             0.5527     0.5563     0.1028     0.2820     0.7573     0.0891     0.8039
+  flat+decim       0.8128     0.8014     0.7281     0.9482     0.3847     0.1508     0.8610
+
+VERDICT (2026-09-06, W1 flat+decim, scale-corrected run): NEGATIVE on the real patch as configured.
+  + on its own 256 grid the whitened run scores EPI 0.81/0.80 (base 2x2-block 0.55), ENLr(HV) 0.95
+    (ideal 1) and its ratio image is white (rLag1 -0.006) -- but that whiteness is the failure:
+    the noisy whitened input still has lag-1 0.21 and the network absorbed ALL of it into the
+    output (low-frequency mottling, ENL-ROI(HV) 0.38 vs 0.76, waterCV 0.15 vs 0.09).
+  - visual: blurrier structures, round haloes around point targets (in-band flattening amplifies
+    the band edges where the transfer function is small -> sidelobes the network smooths into blobs).
+  - on the 512 grid (bicubic from 256) every metric is worse (EPI 0.34, ENL-ROI 0.64).
+  Base also absorbs part of the correlated speckle (ratio lag-1 0.30 vs input 0.53) -- the
+  underlying problem is real, this remedy is not. First run (uncorrected MERLIN target scale,
+  out/in 0.57) is superseded by this one.

@@ -1,0 +1,20 @@
+{
+  "channels": [
+    "hh",
+    "hv",
+    "vh",
+    "vv"
+  ],
+  "origin_rc": [
+    3072,
+    4096
+  ],
+  "shape": [
+    1280,
+    1280
+  ],
+  "patch": 512,
+  "stride": 256,
+  "n_patches": 16,
+  "missing": []
+}

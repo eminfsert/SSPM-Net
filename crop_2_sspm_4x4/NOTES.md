@@ -19,3 +19,10 @@ then stitch each channel back into one full image.
 2. `gh auth login -h github.com -p https -w && gh auth setup-git`
 3. `python denoise_crop.py --out crop_2_sspm_4x4` — only the missing patches get processed
 4. Commit & push the new files in `crop_2_sspm_4x4/`.
+
+**Status (2026-09-24): DONE.** All 16/16 patches denoised; merged full images
+(1280x1280, origin r3072 c4096, no missing patches) are in this folder:
+- `crop_2_quadpol_sspm_r3072_c4096.npy` — (4,1280,1280) float32 [HH,HV,VH,VV]
+- `crop_2_<ch>_amp_4x4_sspm_r3072_c4096{.tiff,_uint8.tiff,.png}` per channel
+- `crop_2_<ch>_noisy_vs_sspm.png` — noisy (left) vs. SSPM-Net (right)
+- `merge_info.json` — stitching geometry
